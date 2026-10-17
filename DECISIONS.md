@@ -56,8 +56,11 @@ Core claim
 | Good card DTE (`dte/good_card.py`), Luhn helper (`dte/luhn.py`), their tests | Done |
 | RSA prime DTE | Stub |
 | Attacks: format filter, PIN ranking, side info (bank, last-4), shared ranking helper, their tests, demo | Done |
-| Attacks: two-card, RSA verify | Stub |
-| Experiments: card pairs, success vs baseline, AES mode pitfall | Stub |
+| Attacks: two-card (k cards, simple + Bayes-optimal rule), its tests, demo rows | Done |
+| Attacks: RSA verify | Stub |
+| Experiments: card pairs (`generate_wallet`), demo (`demo_card_attacks.py`), Bayes prediction check (`check_bayes_prediction.py`) | Done |
+| **Next (Kee):** final harness `experiments/success_vs_baseline.py` | Stub. Card setups to cover, each vs the 1/10,000 baseline and the 10.7% top-PIN bound: weak and good DTE under format filter, PIN ranking and format + PIN; good DTE with side info (bank, last-4, bank + last-4, bank + last-4 + PIN); two-card k = 2/3/5 with the simple rule and the Bayes rule (Bayes for any rho sweep); and the PIN-ranking setups re-run with `pin_frequencies_uniform_tail.csv` as the sensitivity check |
+| Experiments: AES mode pitfall | Stub |
 | `data/bin_list.csv` | Done (20 BINs) |
 | `data/pin_frequencies.csv` (+ uniform-tail variant, generator) | Done |
 
@@ -65,12 +68,14 @@ Core claim
 
 | Part | Owner |
 |---|---|
-| Good card DTE, chi-square test, BIN and PIN data | Seann |
-| Format filter, PIN ranking, side info (bank, last-4) attacks | Seann |
+| Shared base (framework, weak DTE, brute force) | Seann |
+| Good card DTE, Luhn helpers, BIN and PIN data | Seann |
+| Format filter, PIN ranking, side info attacks | Seann |
+| Card pair generator, two-card attack | Seann |
 | RSA prime DTE, RSA verify attack | Kee |
 | AES mode pitfall demo | Kee |
-| Card pair generator, two-card attack | Kee (needs the good card DTE first) |
-| Success vs baseline experiment, plots, slides | Both |
+| Final experiment harness (experiments/success_vs_baseline.py), results and charts | Kee |
+| Slides, demo script, Q&A prep | Both |
 
 ## Decision log
 
@@ -246,9 +251,75 @@ it, but it should be mentioned in the slides as a limitation of HE for card numb
 only hide what the attacker can't already see.
 **Where:** discussion only.
 
+### 2026-10-17: Ownership change: card pairs and two-card attack moved to Seann
+**Why:** Kee handed over `experiments/card_pairs.py` and `attacks/two_card.py`; Kee owns the slides
+and charts instead.
+**Where:** Ownership table above.
+
+### 2026-10-17: rho = probability that all k cards in a wallet share one bank
+**Why:** simplest model that generalises from pairs to k cards. With probability rho, one bank is
+drawn by its share and all k cards are drawn from the good DTE conditioned on it (rejection
+sampling); otherwise the k cards are independent DTE draws, which still share a bank by chance with
+probability `S_k = Σ q_b^k`. Each card alone keeps exactly the DTE's distribution, so the attack can
+only exploit correlation between cards. This is not a per-card correlation model.
+**Where:** `experiments/card_pairs.generate_wallet`.
+
+### 2026-10-17: Two-card attack generalised to k cards; simple rule by default, Bayes-optimal with rho
+**Why:** each card is encrypted under the same PIN with its own salt and nonce; brute force groups
+the k decryptions by PIN. The simple rule ranks wallets whose cards all share a bank first, then by
+PIN popularity, ties random. It is easy to explain but at rho < 1 it can do worse than PIN-only
+(mixed real wallets are pushed behind same-bank decoys). The optional Bayes-optimal score
+`P(PIN) · (rho · q_b^(1-k) + (1 - rho))` for same-bank wallets, `P(PIN) · (1 - rho)` otherwise,
+reduces to PIN ranking at rho = 0, so the attacker never does worse than PIN-only. **Any rho sweep
+must use the Bayes rule.** At rho = 1 it does **not** reduce to the simple rule: mixed wallets are
+dropped as in the simple rule, but same-bank wallets are scored `P(PIN) · q_b^(1-k)`, so a match on a
+rare bank counts for more than a match on DBS.
+Results against the good DTE, rho = 1. Predicted values use the model's numbers (Poisson
+approximation over the 9,999 decoy wallets, `experiments/check_bayes_prediction.py`); measured values from
+the demo (200 trials, seed 2026) and a separate 1,000-trial run of k = 5 through the full pipeline
+(seed 7000, reproducible with `python -m experiments.check_bayes_prediction`):
+
+| k | same bank only | same bank + PIN: predicted / measured | Bayes (rho = 1): predicted / measured |
+|---|---|---|---|
+| 2 | 0.05% / 0.0% | 18.8% / 19.5% | 19.3% / 20.5% |
+| 3 | 0.2% / 0.0% | 23.8% / 24.5% | 27.9% / 30.0% |
+| 5 | 2% / 2.0% | 37.2% / 34.0%; 36.5% ± 3.0% (1,000 trials) | 60.6% / 67.0%; **59.8% ± 3.0% (1,000 trials)** |
+
+The demo's 67% at k = 5 was about two standard errors of noise; the 1,000-trial value matches the
+prediction. The 1,000-trial run also re-checked every Bayes ranking against an independently
+computed score (no mismatches).
+**Why Bayes is so much stronger at k = 5:** five random cards all landing on DBS happens about 1 time
+in 260 (`0.33^5`); all on UOB about 1 in 170,000. So about 39 of the ~45 surviving decoy wallets are
+DBS (DBS is 87% of `S_5`), and almost none are from small banks. The simple rule ignores this and
+makes the real wallet compete with all ~45 survivors on PIN popularity alone, so a victim with an
+ordinary PIN (41% of victims) almost always loses. The Bayes rule weights each same-bank wallet by
+`1/q_b^4` (84 for DBS, 15,242 for UOB, 243,865 for Maybank), so a small-bank wallet beats the DBS
+decoys even with an ordinary PIN. Predicted / measured P(win | victim's bank): DBS 30% / 28%,
+OCBC 47% / 50%, POSB 77% / 75%, Standard Chartered 91% / 90%, UOB 95% / 97%, Citibank 97% / 95%,
+Maybank 99.8% / 100%. A DBS victim gains almost nothing, because their wallet looks like the
+commonest kind of decoy.
+**Where:** `attacks/two_card.py`, rows in `experiments/demo_card_attacks.py` (`--trials`, default
+200; about 3 minutes).
+
+### 2026-10-17: Absolute two-card numbers depend on our assumed bank shares
+**Why:** the attack's strength is set by `S_k = Σ q_b^k` and, for the Bayes rule, by how skewed the
+shares are. The bank shares come from our hand-set BIN weights (`data/README.md`), not measured
+data, so the absolute success rates are illustrative. The qualitative result holds for any shares:
+more cards under one PIN → fewer surviving decoys → success rises toward the PIN-popularity limit
+and beyond.
+**Where:** discussion; `data/bin_list.csv` weights.
+
+### 2026-10-17: Ownership table revised
+**Why:** Seann owns everything on the card side (shared base, good DTE, data, all card attacks, card
+pairs). Kee owns the RSA half, the AES pitfall demo and the final harness with results and charts.
+Slides, the demo script and Q&A prep are shared. This replaces the earlier split where Kee owned
+slides and charts and the harness was shared.
+**Where:** Ownership and Status tables above.
+
 ## Open decisions
 
 - RSA DTE: prime size, the exact prime range and its boundary handling with `sympy.nextprime`
   (which returns the smallest prime strictly greater than its input).
-- Correlated card-pair model: what `rho` means and which values to sweep.
+- Correlated card-pair model: which `rho` values to sweep (suggested 0, 0.25, 0.5, 0.75, 1; use the
+  Bayes-optimal rule).
 - Presentation date and timeline.

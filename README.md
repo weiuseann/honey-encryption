@@ -46,12 +46,13 @@ A wrong PIN decrypts to a random seed, and the DTE turns that seed into a decoy.
 | `attacks/pin_ranking.py` | done | DataGenetics PIN popularity |
 | `attacks/ranking.py` | done | `order_by_score` (random tie-break), `rank_of` (shared) |
 | `attacks/side_info.py` | done | known bank, known last 4 digits (combine with PIN ranking) |
-| `attacks/two_card.py` | stub | two cards under one PIN |
+| `attacks/two_card.py` | done | k cards under one PIN (simple and Bayes-optimal ranking) |
 | `attacks/rsa_verify.py` | stub | `N % p == 0` |
-| `experiments/card_pairs.py` | stub | correlated real-card-pair generator |
+| `experiments/card_pairs.py` | done | correlated real-card wallet generator (`rho`) |
 | `experiments/success_vs_baseline.py` | stub | main results: rank / success vs 1/10,000 |
 | `experiments/aes_mode_pitfall.py` | stub | GCM/CBC vs CTR side demo |
-| `experiments/demo_card_attacks.py` | done | real card's rank under format filter / PIN ranking / side info |
+| `experiments/demo_card_attacks.py` | done | real card's rank under every card attack (`--trials N`) |
+| `experiments/check_bayes_prediction.py` | done | two-card attack: predicted vs measured rank-1 success (`--k`, `--trials`) |
 | `data/` | done | `bin_list.csv`, `pin_frequencies.csv` (+ generator script); see `data/README.md` |
 | `tests/` | done for the finished parts | pytest |
 

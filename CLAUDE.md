@@ -16,9 +16,11 @@ code.
 - Every DTE subclasses `dte.base.DTE` and must satisfy its contract: round trip, `decode` never
   raises on any seed, and uniformity as the goal. Each DTE needs tests for the first two.
 - Randomness: experiments must pass a seeded `random.Random(seed)` to `encrypt` / `encode` and
-  record the seed. Library code must default to `default_rng()` and must never hard-code a seed.
+  record the seed. Library code must default to `dte.base.default_rng()` (the OS CSPRNG via
+  `secrets.SystemRandom`), never numpy's `default_rng`, and must never hard-code a seed.
 - Stubs belong to one partner. Don't implement or redesign a stub unless the user asks for that
   specific file.
+- Ownership is listed in `DECISIONS.md`. Only work on files owned by the user you're working with.
 - When you make a non-obvious design decision, add a dated entry to the decision log in
   `DECISIONS.md` and update its Status table or Open decisions list.
 - Don't add co-author lines to commits.

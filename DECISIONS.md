@@ -58,6 +58,17 @@ Core claim
 | Experiments: card pairs, success vs baseline, AES mode pitfall | Stub |
 | `data/bin_list.csv`, `data/pin_frequencies.csv` | Header only |
 
+## Ownership
+
+| Part | Owner |
+|---|---|
+| Good card DTE, chi-square test, BIN and PIN data | Seann |
+| Format filter, PIN ranking, side info (bank, last-4) attacks | Seann |
+| RSA prime DTE, RSA verify attack | Kee |
+| AES mode pitfall demo | Kee |
+| Card pair generator, two-card attack | Kee (needs the good card DTE first) |
+| Success vs baseline experiment, plots, slides | Both |
+
 ## Decision log
 
 Newest entries go at the bottom. Format: **decision**, why, then where it lives in the code.
@@ -120,5 +131,4 @@ RSA-size ranges.
   (which returns the smallest prime strictly greater than its input).
 - PIN frequencies: how to spread probability over PINs not listed in the DataGenetics data.
 - Correlated card-pair model: what `rho` means and which values to sweep.
-- Who owns which half (proposed: cards = Person A; framework, RSA and AES demo = Person B).
 - Presentation date and timeline.

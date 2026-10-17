@@ -1,1 +1,21 @@
-bin,network,bank,product,weight
+bin,network,bank,product,weight,confidence
+411911,visa,DBS,credit,130,aggregator
+455622,visa,DBS,credit,80,aggregator
+462845,visa,DBS,debit,90,aggregator
+452419,visa,OCBC,credit,120,aggregator
+426569,visa,Citibank,credit,55,aggregator
+454750,visa,Citibank,credit,30,aggregator
+450873,visa,Standard Chartered,credit,50,aggregator
+496643,visa,Maybank,credit,45,aggregator
+526471,mastercard,POSB,debit,50,aggregator
+552038,mastercard,POSB,credit,40,aggregator
+554827,mastercard,POSB,debit,40,aggregator
+524040,mastercard,OCBC,credit,40,aggregator
+540012,mastercard,OCBC,credit,30,aggregator
+558860,mastercard,OCBC,credit,30,aggregator
+542125,mastercard,UOB,credit,40,aggregator
+552163,mastercard,UOB,credit,30,aggregator
+524355,mastercard,Standard Chartered,credit,25,aggregator
+549834,mastercard,Standard Chartered,credit,25,aggregator
+222345,mastercard,DBS,credit,30,illustrative
+251234,mastercard,UOB,credit,20,illustrative

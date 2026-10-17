@@ -99,6 +99,15 @@ def _check_table(entries: list[BinEntry]) -> None:
             raise ValueError(f"weight must be a positive integer for BIN {e.bin}")
 
 
+def bank_shares(bins: list[BinEntry]) -> dict[str, float]:
+    """Each bank's share of the total BIN weight = P(a decoded card is from that bank)."""
+    total = sum(e.weight for e in bins)
+    shares: dict[str, float] = {}
+    for e in bins:
+        shares[e.bank] = shares.get(e.bank, 0) + e.weight / total
+    return shares
+
+
 class GoodCardDTE(DTE):
     seed_length = 16  # 128 bits, same as the weak DTE, so ciphertext length can't tell them apart
 

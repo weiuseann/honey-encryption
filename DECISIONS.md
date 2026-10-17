@@ -55,8 +55,8 @@ Core claim
 | Framework (`framework/he.py`), DTE base, weak card DTE, brute force, tests | Done |
 | Good card DTE (`dte/good_card.py`), Luhn helper (`dte/luhn.py`), their tests | Done |
 | RSA prime DTE | Stub |
-| Attacks: format filter, PIN ranking, shared ranking helper, their tests, demo | Done |
-| Attacks: side info, two-card, RSA verify | Stub |
+| Attacks: format filter, PIN ranking, side info (bank, last-4), shared ranking helper, their tests, demo | Done |
+| Attacks: two-card, RSA verify | Stub |
 | Experiments: card pairs, success vs baseline, AES mode pitfall | Stub |
 | `data/bin_list.csv` | Done (20 BINs) |
 | `data/pin_frequencies.csv` (+ uniform-tail variant, generator) | Done |
@@ -208,6 +208,43 @@ strongest-attacker assumption and the standard one for HE's bound (rank-1 succes
 the most popular PIN, 10.7%). A mismatched prior (attacker's table differs from victims') would only
 lower the attacker's success, and could be a later sensitivity run.
 **Where:** `attacks/pin_ranking.py` (`rank_by_pin_popularity`, `sample_pins`).
+
+### 2026-10-17: Side info = known bank and known last 4, combined through one consistency flag
+**Why:** the attacker ranks first the candidates consistent with every known fact, then breaks ties
+by PIN popularity (if used), then randomly. A candidate matching only some facts is certainly a
+decoy, so ordering partial matches can't change the real card's rank; one flag is simpler than a
+per-fact tuple. Expected rank-1 success against the good DTE (demo, 200 trials, seed 2026):
+bank only ≈ (number of banks)/10,000 ≈ 0.07% (measured 0.000, median rank ~670); last-4 only
+≈ 1 − 1/e ≈ 63% (measured 70.5%), since about one decoy in 10^4 shares the last 4; bank + last-4
+≈ 90% (91.5%); bank + last-4 + PIN ≈ 95% (95.5%). The last 4 include the Luhn check digit, but it
+depends on uniform digits, so the match rate is still about 1/10^4.
+**Where:** `attacks/side_info.py`, rows in `experiments/demo_card_attacks.py`.
+
+### 2026-10-17: Side information is assumed accurate
+**Why:** we model an attacker who really knows the victim's bank and last 4 (from a receipt, a
+banking app or a statement). If the fact were wrong, the real card would rank last. Noisy side info
+is not modelled.
+**Where:** `attacks/side_info.py` (module docstring).
+
+### 2026-10-17: DBS and POSB are separate banks for the bank attack
+**Why:** we match the `bank` column of `data/bin_list.csv` exactly. POSB is DBS's consumer brand, so
+an attacker who only knows "DBS group" would have a weaker filter; treating them separately assumes
+the attacker knows which brand is on the card, which is what a receipt or card face shows.
+**Where:** `attacks/side_info.matches_bank`.
+
+### 2026-10-17: Card product filter dropped (future work)
+**Why:** the stub's `filter_by_product` was out of scope. Our table's `product` is only credit/debit,
+which removes about half the decoys at most. A real product dataset (card tiers per BIN) would make
+it worth adding.
+**Where:** not implemented.
+
+### 2026-10-17: Discussion note: first 6 + last 4 is a stronger leak than bank + last 4
+**Why:** PCI DSS allows merchants to display the first 6 and last 4 digits of a card together
+(e.g. on receipts). The first 6 is the BIN itself, a much finer filter than the bank: against our
+table it would leave about 10,000 × w_BIN/1000 × 10^-4 decoys, essentially none. We don't implement
+it, but it should be mentioned in the slides as a limitation of HE for card numbers: the DTE can
+only hide what the attacker can't already see.
+**Where:** discussion only.
 
 ## Open decisions
 

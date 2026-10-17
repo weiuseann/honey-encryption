@@ -45,13 +45,13 @@ A wrong PIN decrypts to a random seed, and the DTE turns that seed into a decoy.
 | `attacks/format_filter.py` | done | Luhn / prefix / BIN filters |
 | `attacks/pin_ranking.py` | done | DataGenetics PIN popularity |
 | `attacks/ranking.py` | done | `order_by_score` (random tie-break), `rank_of` (shared) |
-| `attacks/side_info.py` | stub | bank, card product, last 4 digits |
+| `attacks/side_info.py` | done | known bank, known last 4 digits (combine with PIN ranking) |
 | `attacks/two_card.py` | stub | two cards under one PIN |
 | `attacks/rsa_verify.py` | stub | `N % p == 0` |
 | `experiments/card_pairs.py` | stub | correlated real-card-pair generator |
 | `experiments/success_vs_baseline.py` | stub | main results: rank / success vs 1/10,000 |
 | `experiments/aes_mode_pitfall.py` | stub | GCM/CBC vs CTR side demo |
-| `experiments/demo_card_attacks.py` | done | real card's rank under format filter / PIN ranking |
+| `experiments/demo_card_attacks.py` | done | real card's rank under format filter / PIN ranking / side info |
 | `data/` | done | `bin_list.csv`, `pin_frequencies.csv` (+ generator script); see `data/README.md` |
 | `tests/` | done for the finished parts | pytest |
 

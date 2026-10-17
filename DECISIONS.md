@@ -53,10 +53,13 @@ Core claim
 | Part | Status |
 |---|---|
 | Framework (`framework/he.py`), DTE base, weak card DTE, brute force, tests | Done |
-| Good card DTE, RSA prime DTE | Stub |
-| Attacks: format filter, PIN ranking, side info, two-card, RSA verify | Stub |
+| Good card DTE (`dte/good_card.py`), Luhn helper (`dte/luhn.py`), their tests | Done |
+| RSA prime DTE | Stub |
+| Attacks: format filter, PIN ranking, shared ranking helper, their tests, demo | Done |
+| Attacks: side info, two-card, RSA verify | Stub |
 | Experiments: card pairs, success vs baseline, AES mode pitfall | Stub |
-| `data/bin_list.csv`, `data/pin_frequencies.csv` | Header only |
+| `data/bin_list.csv` | Done (20 BINs) |
+| `data/pin_frequencies.csv` (+ uniform-tail variant, generator) | Done |
 
 ## Ownership
 
@@ -123,12 +126,92 @@ RSA-size ranges.
 **Why:** keeps data separate from code, and the sources are cited in one place.
 **Where:** `data/README.md` (formats and sources).
 
+### 2026-10-17: Good card DTE scope is 16-digit Visa and Mastercard, 6-digit BINs
+**Why:** the message format is 16 digits, so Amex (15) and other lengths are out. Structure is
+network → 6-digit BIN → 9 uniform middle digits → computed Luhn digit. Real issuers moved to 8-digit
+BINs in 2022 and allocate middle digits unevenly; we don't model either, and say so as a known
+mismatch an attacker could exploit.
+**Where:** `dte/good_card.py`.
+
+### 2026-10-17: Good card DTE uses a 128-bit seed and integer-weight intervals, no floats
+**Why:** float inverse-CDF intervals round at the boundaries, which can break exact reversibility or
+skew probabilities. Instead each BIN has an integer weight `w_i` and owns exactly `w_i` of
+`W = Σw_i` slots (rows sorted by network, so each network is one contiguous block). A card is the
+integer `u = slot·10^9 + middle < M = W·10^9`, and `encode = r·M + u` with a random slot in the
+BIN's block and random `r < 2^128 // M`; `decode = int(seed) mod M`. This is the weak DTE's trick in
+mixed radix: exact round trip, `P(BIN i) = w_i/W` exactly, and bias at most `M/2^128 ≈ 3·10^-27`
+for `W = 1000`. The constructor refuses tables where the bias bound would exceed `2^-64`. 16 bytes
+also matches the weak DTE, so ciphertext length doesn't reveal which DTE is in use.
+**Where:** `dte/good_card.py` (docstring has the full argument); boundary tests in
+`tests/test_good_card_dte.py`.
+
+### 2026-10-17: BIN table from a public aggregator, weights are our assumption
+**Why:** no issuer publishes BIN lists or per-BIN card counts. 18 of the 22 BINs come from a
+third-party BIN database (Singapore issuers: DBS/POSB, OCBC, UOB, Citibank, Standard Chartered,
+Maybank) and are marked `aggregator`. 4 are made up to fill gaps and are marked `illustrative`.
+Weights are hand-set integers: Visa 600 / Mastercard 400, larger banks weighted higher. The
+chi-square test only checks the DTE against these weights, not against reality.
+**Where:** `data/bin_list.csv`, sources and caveats in `data/README.md`.
+
+### 2026-10-17: Luhn lives in a shared module
+**Why:** the good DTE, the format filter and the card pair generator all need it, so there is one
+implementation to test and explain.
+**Where:** `dte/luhn.py`, `tests/test_luhn.py`.
+
+### 2026-10-17: Experiments generate "real" cards by sampling the good DTE
+**Why:** the 1/10,000 baseline assumes the real message is drawn from the same distribution the DTE
+decodes to. Generating real cards with `GoodCardDTE.sample(rng)` (decode a random seed) makes that
+hold exactly, so any rise above the baseline comes from the attack being measured (PIN popularity,
+side info, correlated pairs), not from an accidental mismatch between our test data and the DTE.
+Any real card must also use a BIN from the table, or `encode` raises. The correlated card-pair
+generator should draw its BINs from this table for the same reason.
+**Where:** `GoodCardDTE.sample` in `dte/good_card.py`; to be used by `experiments/card_pairs.py`
+and `experiments/success_vs_baseline.py`.
+
+### 2026-10-17: Removed the two illustrative UOB Visa BINs; Visa rebalanced to keep 60/40
+**Why:** the table already has real (aggregator-listed) UOB Mastercard BINs, so made-up UOB Visa
+rows only added unverifiable data. Their 100 weight went back to other Visa BINs (DBS +40, OCBC +30,
+Citibank +15, Maybank +15), keeping the assumed 60/40 network split. The table is now 20 BINs:
+18 aggregator, 2 illustrative.
+**Where:** `data/bin_list.csv`, `data/README.md`.
+
+### 2026-10-17: Every attack returns a full guess order; ties are broken at random
+**Why:** a ranked list lets the harness record the true PIN's rank and lets attacks be combined
+(e.g. filter, then PIN popularity, as a tuple score). Ties must be broken randomly with the
+experiment's seeded rng: against the good DTE all 10,000 candidates tie under the format filter,
+and breaking ties by PIN order would always guess 0000 first, inflating success above 1/10,000
+whenever victim PINs are non-uniform.
+**Where:** `attacks/ranking.py` (`order_by_score`, `rank_of`), used by both attacks.
+
+### 2026-10-17: Format filter has three cumulative stages and uses the DTE's own BIN table
+**Why:** Luhn, then network prefix, then BIN-in-table, each using only public knowledge. Giving the
+attacker the same BIN table as the good DTE is the matched-DTE setting: the filter then removes no
+good-DTE decoy, while for the weak DTE it leaves about 0.02 expected decoys (10,000 → ~1,000 →
+~155 → real card).
+**Where:** `attacks/format_filter.py`.
+
+### 2026-10-17: PIN distribution = published DataGenetics values + a calibrated two-tier model
+**Why:** DataGenetics publishes only the top 20, the bottom 21 and some cumulative points. We keep
+those 41 values exactly. The other PINs are split into a "pattern" tier (MMDD dates, years
+1900-2029, ABAB pairs: 564 PINs) at `k·b` and a "base" tier at `b`, with `b` and `k` solved from two
+published facts (total = 1, top 426 = 50%). Which PINs are patterns is our assumption. A
+uniform-remainder variant is kept as a sensitivity check.
+**The model understates PIN concentration**: against published figures it gives the top 61 PINs
+29% (published ~33%) and the bottom 4,200 PINs 18% (published < 10.7%). Real PINs are more
+predictable than our table, so **all attack success we report is a conservative lower bound**.
+**Where:** `data/build_pin_frequencies.py` → `data/pin_frequencies.csv`,
+`data/pin_frequencies_uniform_tail.csv`; published vs assumed numbers in `data/README.md`.
+
+### 2026-10-17: The attacker is assumed to know the PIN distribution exactly
+**Why:** experiments draw victim PINs from the same table the attacker ranks by. This is the
+strongest-attacker assumption and the standard one for HE's bound (rank-1 success ≈ probability of
+the most popular PIN, 10.7%). A mismatched prior (attacker's table differs from victims') would only
+lower the attacker's success, and could be a later sensitivity run.
+**Where:** `attacks/pin_ranking.py` (`rank_by_pin_popularity`, `sample_pins`).
+
 ## Open decisions
 
-- Good card DTE: seed length, and how to handle rounding in the inverse-CDF intervals.
-- Good card DTE: the source of the BIN list and the weights.
 - RSA DTE: prime size, the exact prime range and its boundary handling with `sympy.nextprime`
   (which returns the smallest prime strictly greater than its input).
-- PIN frequencies: how to spread probability over PINs not listed in the DataGenetics data.
 - Correlated card-pair model: what `rho` means and which values to sweep.
 - Presentation date and timeline.

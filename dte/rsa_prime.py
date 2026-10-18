@@ -30,6 +30,22 @@ from sympy import nextprime, prevprime
 from dte.base import DTE
 
 
+def _sample_seed_integer(residue_min: int, residue_max: int, modulus: int,
+                         seed_space_size: int, rng: Random) -> int:
+    """Uniformly sample seeds whose remainder is in the inclusive residue interval.
+
+    Equal-probability (residue, repetition) proposals give each valid seed one
+    representation. Retry proposals beyond the seed space's partial last block.
+    """
+    max_repetition = seed_space_size // modulus
+    while True:
+        residue = rng.randrange(residue_min, residue_max + 1)
+        repetition = rng.randrange(max_repetition + 1)
+        seed_integer = repetition * modulus + residue
+        if seed_integer < seed_space_size:
+            return seed_integer
+
+
 def generate_real_prime(bits: int, rng: Random | None = None) -> int:
     """Generate a 'real' prime from the exact range the DTE covers."""
     raise NotImplementedError

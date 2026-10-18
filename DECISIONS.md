@@ -54,7 +54,7 @@ Core claim
 |---|---|
 | Framework (`framework/he.py`), DTE base, weak card DTE, brute force, tests | Done |
 | Good card DTE (`dte/good_card.py`), Luhn helper (`dte/luhn.py`), their tests | Done |
-| RSA prime DTE | In progress: domain/seed-size constructor and total decoder tested; encode and real-prime generation remain stubs |
+| RSA prime DTE | In progress: domain, decoder, and random seed-preimage helper tested; encode and real-prime generation remain stubs |
 | Attacks: format filter, PIN ranking, side info (bank, last-4), shared ranking helper, their tests, demo | Done |
 | Attacks: two-card (k cards, simple + Bayes-optimal rule), its tests, demo rows | Done |
 | Attacks: RSA verify | Stub |
@@ -348,6 +348,27 @@ using trial division, including every residue at low and high seed values; tests
 also cover zero/all-one seeds, seeded random bytes, and malformed lengths.
 **Where:** `RSAPrimeDTE.decode` and `tests/test_rsa_prime_dte.py`. Encoding and
 real-prime generation remain stubs; end-to-end RSA encryption is not complete.
+
+### 2026-10-18: Random seed preimages use rejection sampling (Kee, task 2.3)
+**Decision:** a private integer helper takes the target's inclusive residue interval,
+modulus M, seed-space size S, and caller RNG. Draw residue j uniformly from the
+interval and repetition r uniformly from 0 through `S//M`, form `z = r*M+j`,
+and retry if `z >= S`. The helper returns the accepted integer; serialization
+and choosing the interval for a prime belong to the future encoder.
+**Why:** each proposed pair has equal probability and each valid seed has one
+representation. Rejecting out-of-range pairs therefore samples exactly uniformly
+from the valid preimages, including the partial last block. This is simpler than
+weighted interval bookkeeping. The extra repetition when S is divisible by M is
+always rejected; with the actual slack-bit seed space, retries are negligible.
+**Validation:** enumerate toy proposal pairs and compare accepted seeds against
+independently enumerated remainder membership. Force rejection followed by success,
+cover a singleton interval and a divisible seed space, and check reproducibility
+and decoder compatibility at actual seed capacity. For S=16, M=6, residues 4..5,
+the valid seeds are exactly 4, 5, 10, and 11.
+**Where:** `_sample_seed_integer` in `dte/rsa_prime.py` and its tests. The helper
+requires valid internal bounds and explicit randomness; future `encode` will
+validate messages and supply the caller RNG or secure default. Encoding and
+real-prime generation are not implemented by this task.
 
 ## Open decisions
 

@@ -2,11 +2,12 @@
 
 from math import isqrt
 from random import Random
+from unittest.mock import Mock, call
 
 import pytest
 from sympy import nextprime
 
-from dte.rsa_prime import RSAPrimeDTE
+from dte.rsa_prime import RSAPrimeDTE, _sample_seed_integer
 
 
 @pytest.mark.parametrize(
@@ -116,3 +117,67 @@ def test_decode_rejects_wrong_seed_length(length):
     dte = RSAPrimeDTE(4)  # Expected seed length is 17 bytes.
     with pytest.raises(ValueError, match="seed must be exactly 17 bytes"):
         dte.decode(bytes(length))
+
+
+@pytest.mark.parametrize(
+    "space_size, modulus, lo, hi",
+    [(16, 6, 0, 3), (16, 6, 4, 5), (16, 6, 2, 5),
+     (16, 6, 4, 4), (12, 6, 0, 5)],
+)
+def test_seed_sampler_proposals_cover_each_valid_seed_once(space_size, modulus, lo, hi):
+    expected = [z for z in range(space_size) if lo <= z % modulus <= hi]
+    accepted = []
+
+    for residue in range(lo, hi + 1):
+        for repetition in range(space_size // modulus + 1):
+            proposal = repetition * modulus + residue
+            rng = Mock(spec=Random)
+            # A rejected proposal is followed by the known valid seed lo.
+            rng.randrange.side_effect = [residue, repetition, lo, 0]
+            result = _sample_seed_integer(lo, hi, modulus, space_size, rng)
+            assert rng.randrange.call_args_list[:2] == [
+                call(lo, hi + 1), call(space_size // modulus + 1),
+            ]
+            if proposal < space_size:
+                assert result == proposal
+                assert rng.randrange.call_count == 2
+                accepted.append(result)
+            else:
+                assert result == lo
+                assert rng.randrange.call_count == 4
+
+    # List equality also detects duplicated seeds, not just missing ones.
+    assert sorted(accepted) == expected
+
+
+def test_seed_sampler_toy_prime_thirteen_preimages():
+    expected = [4, 5, 10, 11]
+    actual = []
+    for residue, repetition in [(4, 0), (5, 0), (4, 1), (5, 1)]:
+        rng = Mock(spec=Random)
+        rng.randrange.side_effect = [residue, repetition]
+        actual.append(_sample_seed_integer(4, 5, 6, 16, rng))
+    assert actual == expected
+
+
+def test_seed_sampler_retries_out_of_range_proposal():
+    rng = Mock(spec=Random)
+    rng.randrange.side_effect = [5, 2, 4, 1]  # Propose 17 (invalid), then 10.
+    assert _sample_seed_integer(4, 5, 6, 16, rng) == 10
+    assert rng.randrange.call_count == 4
+
+
+def test_seed_sampler_is_reproducible_and_respects_real_seed_capacity():
+    dte = RSAPrimeDTE(4)
+
+    def samples(rng):
+        return [_sample_seed_integer(4, 5, dte.modulus, dte.seed_space_size, rng)
+                for _ in range(50)]
+
+    first = samples(Random(2026))
+    assert first == samples(Random(2026))
+    assert len(set(first)) > 1
+    for seed_integer in first:
+        assert 0 <= seed_integer < dte.seed_space_size
+        assert seed_integer % dte.modulus in (4, 5)
+        assert dte.decode(seed_integer.to_bytes(dte.seed_length, "big")) == 13

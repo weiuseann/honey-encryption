@@ -1,4 +1,4 @@
-"""RSA prime DTE: domain and decoding implemented; encoding/generation are stubs.
+"""RSA prime DTE with reversible encoding and separate real-prime generation.
 
 What goes here (Scenario B, owner: RSA half):
   Message = one RSA prime factor p (real size, e.g. 1024-bit for RSA-2048).
@@ -25,9 +25,9 @@ DTE is.
 
 from random import Random
 
-from sympy import nextprime, prevprime
+from sympy import isprime, nextprime, prevprime
 
-from dte.base import DTE
+from dte.base import DTE, default_rng
 
 
 def _sample_seed_integer(residue_min: int, residue_max: int, modulus: int,
@@ -47,8 +47,13 @@ def _sample_seed_integer(residue_min: int, residue_max: int, modulus: int,
 
 
 def generate_real_prime(bits: int, rng: Random | None = None) -> int:
-    """Generate a 'real' prime from the exact range the DTE covers."""
-    raise NotImplementedError
+    """Sample odd candidates uniformly, rejecting composites in the DTE's domain."""
+    domain = RSAPrimeDTE(bits)
+    rng = rng or default_rng()
+    while True:
+        candidate = rng.randrange(domain.lower_bound + 1, domain.max_prime + 1, 2)
+        if isprime(candidate):
+            return candidate
 
 
 class RSAPrimeDTE(DTE):
@@ -58,7 +63,7 @@ class RSAPrimeDTE(DTE):
     applies nextprime(x), so x must stop BEFORE the largest allowed prime.
     For bits=4, primes are 11 and 13; x ranges from 7 through 12 inclusive.
 
-    Encoding and real-prime generation remain unfinished.
+    Real-prime generation samples independently of the decoder's gap-biased output.
     """
 
     def __init__(self, bits: int):
@@ -85,7 +90,22 @@ class RSAPrimeDTE(DTE):
         self.seed_space_size = 2 ** (8 * self.seed_length)
 
     def encode(self, message: int, rng: Random | None = None) -> bytes:
-        raise NotImplementedError
+        """Choose a random fixed-length seed that decodes to the given prime."""
+        if isinstance(message, bool) or not isinstance(message, int):
+            raise TypeError("message must be an integer prime")
+        if not self.lower_bound <= message <= self.max_prime:
+            raise ValueError(f"message must be a {self.bits}-bit prime")
+        if not isprime(message):
+            raise ValueError("message must be prime")
+
+        # nextprime is strict, so its preimage ends at message-1, not message.
+        x_min = max(self.x_min, int(prevprime(message)))
+        x_max = message - 1
+        seed_integer = _sample_seed_integer(
+            x_min - self.x_min, x_max - self.x_min,
+            self.modulus, self.seed_space_size, rng or default_rng(),
+        )
+        return seed_integer.to_bytes(self.seed_length, "big")
 
     def decode(self, seed: bytes) -> int:
         """Map every correctly sized seed to a prime of the configured bit length."""

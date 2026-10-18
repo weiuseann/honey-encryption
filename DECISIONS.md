@@ -54,7 +54,7 @@ Core claim
 |---|---|
 | Framework (`framework/he.py`), DTE base, weak card DTE, brute force, tests | Done |
 | Good card DTE (`dte/good_card.py`), Luhn helper (`dte/luhn.py`), their tests | Done |
-| RSA prime DTE | In progress: domain, decoder, and random seed-preimage helper tested; encode and real-prime generation remain stubs |
+| RSA prime DTE | Domain, decoder, sampler, randomized encoder, and real-prime generator tested; broader integration/bias validation pending |
 | Attacks: format filter, PIN ranking, side info (bank, last-4), shared ranking helper, their tests, demo | Done |
 | Attacks: two-card (k cards, simple + Bayes-optimal rule), its tests, demo rows | Done |
 | Attacks: RSA verify | Stub |
@@ -370,10 +370,45 @@ requires valid internal bounds and explicit randomness; future `encode` will
 validate messages and supply the caller RNG or secure default. Encoding and
 real-prime generation are not implemented by this task.
 
+### 2026-10-18: RSA encoding inverts strict next-prime intervals (Kee, task 2.4)
+**Decision:** accept integer primes in the configured domain, rejecting booleans,
+non-integers, composites, and out-of-range values. For prime p, its valid
+next-prime inputs run from `max(L-1, prevprime(p))` through `p-1`, inclusive.
+Subtract L-1 to obtain residue bounds, call the existing uniform preimage
+sampler, then serialize its integer as exactly the configured big-endian bytes.
+Use the supplied RNG or `default_rng()` when absent; no fixed seed in library code.
+**Why:** `nextprime(p)` skips p, so including p in the encoding interval breaks
+round trips. Clipping the first interval to L-1 makes it match the decoder's
+actual domain. Sampling a full seed preimage rather than storing p directly
+allows randomized encodings of the same prime and avoids exposing a small-seed
+representation. This does not remove the documented prime-gap distribution bias.
+**Where:** `RSAPrimeDTE.encode` and its tests. Tests cover all primes in small
+domains, seeded 16-bit samples, explicit first/last gap endpoints, controlled
+distinct seeds, repeatability, RNG selection, fixed-length bytes, and invalid inputs.
+Real-prime generation and the broader framework/bias checks remain future tasks.
+
+### 2026-10-18: Real RSA primes use independent odd-candidate rejection (Kee, task 2.5)
+**Decision:** construct the existing RSA DTE domain, then draw odd integers uniformly
+from `L+1` through Pmax inclusive using `randrange(L+1, Pmax+1, 2)`. Return the first
+candidate accepted by `isprime`; retry composites. Use the supplied RNG or the
+shared secure default. Constructor reuse keeps size validation and bounds in one place.
+**Why:** all supported primes are odd for b>=3. Every supported prime appears once
+in the uniform candidate set, so rejection gives uniform prime selection under
+ideal uniform randomness. Generating victims through next-prime decoding instead
+would favour larger preceding gaps and mask the DTE's distribution mismatch.
+This is a teaching prime sampler, not a complete production RSA key generator;
+SymPy's large-number predicate uses probable-prime testing rather than certificates.
+**Where:** `generate_real_prime` and tests in `tests/test_rsa_prime_dte.py`.
+Controlled RNGs exercise composite rejection and both boundary primes, including
+the prime upper endpoint. Tests also cover bit length, independent small-prime
+checks, encodability, reproducibility, secure-default selection, and invalid sizes.
+Full framework integration, real-size smoke checks, and explicit bias counts
+remain task 2.6; no modulus/key-pair generation is added here.
+
 ## Open decisions
 
-- RSA DTE: implement and verify encode/real-prime generation using the domain
-  fixed above; validate the planned 1024-bit demonstration's cost before full enumeration.
+- RSA DTE: finish framework/bias validation and real-size smoke checks; validate
+  the planned 1024-bit demonstration's cost before full enumeration.
 - Correlated card-pair model: which `rho` values to sweep (suggested 0, 0.25, 0.5, 0.75, 1; use the
   Bayes-optimal rule).
 - Presentation date and timeline.

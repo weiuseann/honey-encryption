@@ -40,14 +40,14 @@ A wrong PIN decrypts to a random seed, and the DTE turns that seed into a decoy.
 | `dte/weak_card.py` | done | uniform 16 digits (Scenario A baseline) |
 | `dte/good_card.py` | done | inverse-CDF: network → BIN → digits → Luhn |
 | `dte/luhn.py` | done | `luhn_check_digit`, `is_luhn_valid` (shared) |
-| `dte/rsa_prime.py` | stub | next-prime DTE for real-size RSA primes |
+| `dte/rsa_prime.py` | done | reversible next-prime DTE, separate prime sampler; gap-biased decoys |
 | `attacks/brute_force.py` | done | decrypt under all 10,000 PINs |
 | `attacks/format_filter.py` | done | Luhn / prefix / BIN filters |
 | `attacks/pin_ranking.py` | done | DataGenetics PIN popularity |
 | `attacks/ranking.py` | done | `order_by_score` (random tie-break), `rank_of` (shared) |
 | `attacks/side_info.py` | done | known bank, known last 4 digits (combine with PIN ranking) |
 | `attacks/two_card.py` | done | k cards under one PIN (simple and Bayes-optimal ranking) |
-| `attacks/rsa_verify.py` | stub | `N % p == 0` |
+| `attacks/rsa_verify.py` | done | proper-divisor verification; preserves all matching PIN-factor pairs |
 | `experiments/card_pairs.py` | done | correlated real-card wallet generator (`rho`) |
 | `experiments/success_vs_baseline.py` | stub | main results: rank / success vs 1/10,000 |
 | `experiments/aes_mode_pitfall.py` | stub | GCM/CBC vs CTR side demo |
@@ -107,6 +107,56 @@ decrypt(dte, ct, "4821")       # '4111111111111111'
 decrypt(dte, ct, "0000")       # a decoy, no error
 brute_force(ct, dte)           # [('0000', ...), ..., ('9999', ...)]
 ```
+
+## RSA prime DTE
+
+The RSA DTE works with the same framework as the card DTEs:
+
+```python
+from random import Random
+from dte.rsa_prime import RSAPrimeDTE, generate_real_prime
+from framework.he import encrypt, decrypt
+
+rng = Random(2026)  # Reproducible experiment only; omit rng for secure defaults.
+dte = RSAPrimeDTE(1024)
+p = generate_real_prime(1024, rng)
+ct = encrypt(dte, p, "0042", rng)
+assert decrypt(dte, ct, "0042") == p
+decoy = decrypt(dte, ct, "0000")  # Another 1024-bit prime candidate; no error.
+```
+
+1024-bit primes use 144-byte seeds, so their serialized ciphertexts occupy
+176 bytes including salt and nonce. A small-size collision can make a wrong-PIN
+candidate equal the real prime; distinct output is not a required guarantee.
+
+**Distribution limitation:** next-prime decoding favours primes with wider
+preceding intervals, clipped at the domain boundary. With four-bit primes,
+four residues lead to 11 and two to 13: approximately 2/3 versus 1/3. The generator
+samples primes independently by rejecting composite odd candidates. Extra seed
+bits reduce modulo bias; they do not remove this prime-gap bias. The exhaustive
+test temporarily uses a one-byte seed space: all 256 seeds give counts 172 for
+11 and 84 for 13. Actual seed sizes are unchanged by that test.
+
+This is a teaching prime-factor encoder, not a production RSA key generator.
+SymPy uses probable-prime testing for large integers rather than primality
+certificates. Valid prime decoys can still be verified against a public modulus;
+the RSA verification attack is a separate component. Tests cover small domains,
+framework integration, and a few 1024-bit round trips; they do not perform the
+full 10,000-PIN real-size attack.
+
+Public verification keeps every candidate proper factor of N, in input order:
+
+```python
+from attacks.rsa_verify import find_real_prime
+
+candidates = [("0000", 17), ("0042", 11), ("1234", 13), ("9999", 11)]
+assert find_real_prime(candidates, 143) == [
+    ("0042", 11), ("1234", 13), ("9999", 11),
+]
+```
+
+Finding a valid factor does not necessarily identify the original PIN uniquely.
+The verifier tests supplied integer candidates; it does not factor N from scratch.
 
 ## Randomness rule (reproducibility)
 

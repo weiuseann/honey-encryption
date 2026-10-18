@@ -54,10 +54,10 @@ Core claim
 |---|---|
 | Framework (`framework/he.py`), DTE base, weak card DTE, brute force, tests | Done |
 | Good card DTE (`dte/good_card.py`), Luhn helper (`dte/luhn.py`), their tests | Done |
-| RSA prime DTE | Domain, decoder, sampler, randomized encoder, and real-prime generator tested; broader integration/bias validation pending |
+| RSA prime DTE | Done: domain, decoder, sampler, encoder, real-prime generation, framework integration, exact toy bias counts, and 1024-bit smoke checks |
 | Attacks: format filter, PIN ranking, side info (bank, last-4), shared ranking helper, their tests, demo | Done |
 | Attacks: two-card (k cards, simple + Bayes-optimal rule), its tests, demo rows | Done |
-| Attacks: RSA verify | Stub |
+| Attacks: RSA verify | Done: proper-divisor filter, all matches preserved; end-to-end RSA demo pending |
 | Experiments: card pairs (`generate_wallet`), demo (`demo_card_attacks.py`), Bayes prediction check (`check_bayes_prediction.py`) | Done |
 | **Next (Kee):** final harness `experiments/success_vs_baseline.py` | Stub. Card setups to cover, each vs the 1/10,000 baseline and the 10.7% top-PIN bound: weak and good DTE under format filter, PIN ranking and format + PIN; good DTE with side info (bank, last-4, bank + last-4, bank + last-4 + PIN); two-card k = 2/3/5 with the simple rule and the Bayes rule (Bayes for any rho sweep); and the PIN-ranking setups re-run with `pin_frequencies_uniform_tail.csv` as the sensitivity check |
 | Experiments: AES mode pitfall | Stub |
@@ -405,10 +405,48 @@ checks, encodability, reproducibility, secure-default selection, and invalid siz
 Full framework integration, real-size smoke checks, and explicit bias counts
 remain task 2.6; no modulus/key-pair generation is added here.
 
+### 2026-10-18: RSA DTE integration and bias evidence (Kee, task 2.6)
+**Validation:** the unchanged AES-CTR framework recovers generated primes under
+the correct PIN, and wrong PINs still decode to primes of the configured size.
+Ciphertext serialization and seeded encryption repeatability are covered. Tiny
+domains may collide, so tests do not assert every wrong-PIN output differs.
+**Bias evidence:** tests temporarily shrink only their local DTE instance to
+one-byte seeds and enumerate all 256 values. Expected counts use independently
+enumerated primes, clipped preceding-gap widths, full modulo blocks, and the
+partial final block. In the four-bit domain, 11 receives 172 seeds and 13 receives
+84; with normal slack bits the probabilities approach 4/6 and 2/6. This confirms
+prime-gap bias and distinguishes it from finite modulo bias rather than claiming
+uniform decoys or agreement with production RSA key generation.
+**Real-size smoke:** a seeded 1024-bit prime passes three DTE round trips,
+framework correct-PIN recovery, zero/all-one seed decoding, and one wrong-PIN
+decryption. Seeds are 144 bytes; serialized ciphertexts are 176 bytes. SymPy
+large-number primality checks are probable-prime checks, not certificates.
+**Where:** `tests/test_rsa_prime_dte.py`, `dte/rsa_prime.py` explanation, and
+README RSA usage/limitations. The DTE component is complete; RSA public
+verification and the full 10,000-PIN experiment remain separate unfinished work.
+
+### 2026-10-18: RSA verification returns all proper-divisor matches (Kee, task 3.1)
+**Decision:** `find_real_prime` keeps every candidate pair satisfying
+`1 < candidate < N` and `N % candidate == 0`, preserving input order and duplicate
+matches. Reject boolean/non-integer N and values N<=3 before processing candidates.
+N is assumed to be a supplied RSA modulus; these checks do not certify its key
+structure or compositeness. Candidate integers come from the DTE, so this filter
+does not repeat primality testing or factor N from scratch.
+**Why:** zero is unsafe to divide by, and 1 or N are trivial divisors. Both RSA
+factors may occur in candidates, and multiple PINs may produce the same factor,
+especially in toy domains. Selecting the first match or asserting exactly one
+would confuse factor recovery with unique original-PIN recovery.
+**Example:** with N=143, candidates 11 and 13 divide N; 17 does not. Every
+associated matching PIN is retained, including duplicate rows.
+**Where:** `attacks/rsa_verify.py`, `tests/test_rsa_verify.py`. This demonstrates
+public verification of guessed secrets, not a break of AES or an algorithm for
+factoring an arbitrary RSA modulus without candidate factors. Full encryption,
+10,000-PIN enumeration, and narrated reporting remain tasks 3.2 and 3.3.
+
 ## Open decisions
 
-- RSA DTE: finish framework/bias validation and real-size smoke checks; validate
-  the planned 1024-bit demonstration's cost before full enumeration.
+- RSA experiment: validate the planned 1024-bit demonstration's cost before
+  full enumeration; the DTE's small real-size smoke checks are complete.
 - Correlated card-pair model: which `rho` values to sweep (suggested 0, 0.25, 0.5, 0.75, 1; use the
   Bayes-optimal rule).
 - Presentation date and timeline.

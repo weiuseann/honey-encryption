@@ -1,16 +1,21 @@
-"""[STUB] Public verification: the RSA public key identifies the real prime.
+"""Verify candidate factors using the public RSA modulus, not a secret oracle.
 
-What goes here (Scenario B):
-  The public modulus N = p*q is, by definition, public. For each brute-force
-  candidate p', check N % p' == 0. Only the real p divides N, so the real
-  candidate is found with certainty, however perfect the DTE's decoys are.
-
-Framing (agreed): this is NOT a break of RSA or AES. It shows that honey
-encryption can't hide a secret that can be verified against public
-information. A decoy only helps if the attacker has no way to test it.
+PIN enumeration supplies the candidates; a remainder check identifies valid
+factors. This does not factor an arbitrary modulus without those candidates or
+break AES. Duplicate factors and both RSA factors can match under multiple PINs,
+so finding a factor does not guarantee unique recovery of the original PIN.
 """
 
 
 def find_real_prime(candidates: list[tuple[str, int]], N: int) -> list[tuple[str, int]]:
-    """Return the candidates whose prime divides N (expected: exactly the real one)."""
-    raise NotImplementedError
+    """Keep all proper-divisor candidates in order, including duplicate matches.
+
+    Candidates are integer factors from the DTE; N is the public RSA modulus.
+    Modulus checks validate type/range, not compositeness or RSA key structure.
+    """
+    if isinstance(N, bool) or not isinstance(N, int):
+        raise TypeError("N must be an integer RSA modulus")
+    if N <= 3:
+        raise ValueError("N must be greater than 3")
+
+    return [(pin, p) for pin, p in candidates if 1 < p < N and N % p == 0]

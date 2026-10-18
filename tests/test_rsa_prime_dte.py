@@ -1,13 +1,15 @@
 """RSA domain, sampling, and round-trip tests."""
 
+from collections import Counter
 from math import isqrt
 from random import Random
 from unittest.mock import Mock, call
 
 import pytest
-from sympy import nextprime
+from sympy import isprime, nextprime
 
 from dte.rsa_prime import RSAPrimeDTE, _sample_seed_integer, generate_real_prime
+from framework.he import Ciphertext, decrypt, encrypt
 
 
 @pytest.mark.parametrize(
@@ -326,3 +328,79 @@ def test_prime_generator_rejects_non_integer_bit_counts(bits):
 def test_prime_generator_rejects_bit_counts_below_three(bits):
     with pytest.raises(ValueError, match="bits must be at least 3"):
         generate_real_prime(bits)
+
+
+@pytest.mark.parametrize("bits", [3, 4, 8, 16])
+def test_rsa_dte_integrates_with_framework(bits):
+    rng = Random(2026)
+    dte = RSAPrimeDTE(bits)
+    prime = generate_real_prime(bits, rng)
+    ct = encrypt(dte, prime, "0042", rng)
+    restored = Ciphertext.from_bytes(ct.to_bytes())
+
+    assert len(ct.body) == dte.seed_length
+    assert len(ct.to_bytes()) == 32 + dte.seed_length
+    assert decrypt(dte, restored, "0042") == prime
+    for wrong_pin in ("0000", "1234", "9999"):
+        decoy = decrypt(dte, restored, wrong_pin)
+        assert decoy.bit_length() == bits
+        assert small_is_prime(decoy)
+        # A tiny prime domain can collide; do not require decoy != prime.
+
+
+def test_rsa_framework_encryption_is_reproducible():
+    dte = RSAPrimeDTE(16)
+    assert encrypt(dte, 36671, "0042", Random(2026)) == encrypt(
+        dte, 36671, "0042", Random(2026),
+    )
+
+
+@pytest.mark.parametrize("bits", [3, 4, 8])
+def test_exhaustive_toy_seed_counts_match_clipped_prime_intervals(bits, monkeypatch):
+    dte = RSAPrimeDTE(bits)
+    # Test-only capacity: enumerate every byte, rather than 2^136 actual seeds.
+    monkeypatch.setattr(dte, "seed_length", 1)
+    monkeypatch.setattr(dte, "seed_space_size", 256)
+    counts = Counter(dte.decode(bytes([z])) for z in range(256))
+
+    primes = [n for n in range(2, dte.upper_bound + 1) if small_is_prime(n)]
+    full_blocks, extra_residues = divmod(256, dte.modulus)
+    expected = {}
+    for previous, prime in zip(primes, primes[1:]):
+        if prime < dte.lower_bound:
+            continue
+        start = max(dte.x_min, previous) - dte.x_min
+        stop = prime - dte.x_min  # Exclusive residue endpoint.
+        expected[prime] = full_blocks * (stop - start) + max(
+            0, min(stop, extra_residues) - start,
+        )
+
+    assert dict(counts) == expected
+    assert sum(counts.values()) == 256
+    if bits == 4:
+        assert dict(counts) == {11: 172, 13: 84}
+
+
+def test_1024_bit_prime_round_trips_and_framework_smoke():
+    rng = Random(2026)
+    dte = RSAPrimeDTE(1024)
+    prime = generate_real_prime(1024, rng)
+    assert prime.bit_length() == 1024
+    assert isprime(prime)
+    assert dte.seed_length == 144
+
+    for _ in range(3):
+        seed = dte.encode(prime, rng)
+        assert len(seed) == 144
+        assert dte.decode(seed) == prime
+
+    ct = encrypt(dte, prime, "0042", rng)
+    assert len(ct.to_bytes()) == 176
+    assert decrypt(dte, ct, "0042") == prime
+    for seed in (bytes(144), b"\xff" * 144):
+        candidate = dte.decode(seed)
+        assert candidate.bit_length() == 1024
+        assert isprime(candidate)
+    decoy = decrypt(dte, ct, "0000")
+    assert decoy.bit_length() == 1024
+    assert isprime(decoy)

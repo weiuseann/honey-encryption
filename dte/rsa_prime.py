@@ -1,26 +1,16 @@
-"""RSA prime DTE with reversible encoding and separate real-prime generation.
+"""Teaching DTE for one RSA prime factor, not a production RSA key generator.
 
-What goes here (Scenario B, owner: RSA half):
-  Message = one RSA prime factor p (real size, e.g. 1024-bit for RSA-2048).
-  Next-prime DTE idea:
-    decode(seed) = nextprime(x), where x is the seed mapped into the prime range
-    encode(p)    = a random x in [previous prime, p - 1], clipped to our range, so that
-                   nextprime(x) == p
-  The encode range must match the exact nextPrime convention of the library
-  we use (sympy.nextprime(n) returns the smallest prime STRICTLY greater
-  than n). An off-by-one here breaks round-tripping at the boundary.
+Decode maps seeds into a bounded integer range, then takes the next prime.
+Encode samples seeds inverting that mapping. Real primes are sampled separately
+by rejecting composite odd candidates rather than using the decoder.
 
-Required (agreed):
-  - generate_real_prime() must draw the "real" primes from the same range the
-    DTE covers, so every real prime can be encoded.
-  - Tests: round trip; decoys are prime and have the intended bit length;
-    boundary cases (smallest/largest prime in range) and prime-gap cases.
-  - Bias, stated openly: nextprime picks p with probability proportional to
-    the gap before p, so primes after large gaps are favoured. We do NOT claim
-    this matches the distribution of real RSA key generation.
+Uniform seeds favour primes with wider preceding intervals (clipped at the
+domain boundary). In the four-bit example, 11 owns four residues and 13 owns
+two: roughly 2/3 versus 1/3. Extra seed bits reduce finite modulo bias, not this
+prime-gap bias. We do not claim to match production RSA key distributions.
 
-The matching attack is attacks/rsa_verify.py. It works no matter how good this
-DTE is.
+SymPy uses probable-prime testing at large sizes, not primality certificates.
+Valid-looking prime decoys also remain testable against a public modulus.
 """
 
 from random import Random

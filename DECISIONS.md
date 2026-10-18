@@ -54,7 +54,7 @@ Core claim
 |---|---|
 | Framework (`framework/he.py`), DTE base, weak card DTE, brute force, tests | Done |
 | Good card DTE (`dte/good_card.py`), Luhn helper (`dte/luhn.py`), their tests | Done |
-| RSA prime DTE | Stub |
+| RSA prime DTE | In progress: domain/seed-size constructor and total decoder tested; encode and real-prime generation remain stubs |
 | Attacks: format filter, PIN ranking, side info (bank, last-4), shared ranking helper, their tests, demo | Done |
 | Attacks: two-card (k cards, simple + Bayes-optimal rule), its tests, demo rows | Done |
 | Attacks: RSA verify | Stub |
@@ -316,10 +316,43 @@ Slides, the demo script and Q&A prep are shared. This replaces the earlier split
 slides and charts and the harness was shared.
 **Where:** Ownership and Status tables above.
 
+### 2026-10-18: RSA DTE domain bounds and seed capacity (Kee, task 2.1)
+**Decision:** support Python integer bit counts `b >= 3`, rejecting booleans and non-integers.
+Let `L = 2**(b-1)`, `U = 2**b - 1`, and `Pmax = prevprime(U + 1)`. Prepare the
+next-prime input domain `x = L-1` through `Pmax-1`, inclusive, with
+`M = Pmax - (L-1)` possible values. This covers every b-bit prime. For b=4,
+the input domain is 7 through 12; nextprime outputs only 11 or 13.
+**Why:** `nextprime` is strictly greater than its input. Allowing x up to U can
+produce a (b+1)-bit prime; stopping before Pmax prevents that overflow while
+retaining the largest valid prime. Starting at L-1 retains the smallest valid
+prime. Using `prevprime(U+1)` includes U when U itself is prime (e.g. b=3, U=7).
+**Seed capacity:** use `ceil((b+128)/8)` bytes, expressed with integer arithmetic
+as `(b+128+7)//8`. At least 128 extra bits make future modulo-reduction bias
+negligible; this does not fix the separate prime-gap bias. Final demonstrations
+are planned with 1024-bit factors; the constructor remains configurable for tests.
+**Where:** `dte/rsa_prime.py` constructor, `tests/test_rsa_prime_dte.py`.
+Only configuration is implemented in this task; encoding, decoding, and real-prime
+generation are still stubs. Their behavior is not claimed verified yet.
+
+### 2026-10-18: RSA seed decoding is total for the configured length (Kee, task 2.2)
+**Decision:** interpret seed bytes as a big-endian unsigned integer z, compute
+`x = (L-1) + (z % M)`, and return `int(nextprime(x))` using task 2.1's bounds.
+Reject a seed only if its length differs from the configured byte length; no
+correctly sized byte string is rejected for its value or decoded candidate.
+**Why:** wrong PINs yield arbitrary seed bytes. Rejecting any value within the
+expected seed length would provide a wrong-PIN clue. The bounded x range keeps
+all outputs within the configured prime bit length. Big-endian ordering matches
+the existing card encoders. The decoder is deterministic and draws no randomness.
+**Validation:** small domains are checked against independently enumerated primes
+using trial division, including every residue at low and high seed values; tests
+also cover zero/all-one seeds, seeded random bytes, and malformed lengths.
+**Where:** `RSAPrimeDTE.decode` and `tests/test_rsa_prime_dte.py`. Encoding and
+real-prime generation remain stubs; end-to-end RSA encryption is not complete.
+
 ## Open decisions
 
-- RSA DTE: prime size, the exact prime range and its boundary handling with `sympy.nextprime`
-  (which returns the smallest prime strictly greater than its input).
+- RSA DTE: implement and verify encode/real-prime generation using the domain
+  fixed above; validate the planned 1024-bit demonstration's cost before full enumeration.
 - Correlated card-pair model: which `rho` values to sweep (suggested 0, 0.25, 0.5, 0.75, 1; use the
   Bayes-optimal rule).
 - Presentation date and timeline.

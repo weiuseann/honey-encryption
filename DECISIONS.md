@@ -57,10 +57,11 @@ Core claim
 | RSA prime DTE | Done: domain, decoder, sampler, encoder, real-prime generation, framework integration, exact toy bias counts, and 1024-bit smoke checks |
 | Attacks: format filter, PIN ranking, side info (bank, last-4), shared ranking helper, their tests, demo | Done |
 | Attacks: two-card (k cards, simple + Bayes-optimal rule), its tests, demo rows | Done |
-| Attacks: RSA verify | Done: proper-divisor filter, all matches preserved; end-to-end RSA demo pending |
+| Attacks: RSA verify | Done: proper-divisor filter plus small and real-size end-to-end evidence |
+| RSA narrated demo (`experiments/demo_rsa.py`) | Done: small demonstration and full 10,000-PIN 1024-bit run verified and recorded |
 | Experiments: card pairs (`generate_wallet`), demo (`demo_card_attacks.py`), Bayes prediction check (`check_bayes_prediction.py`) | Done |
 | **Next (Kee):** final harness `experiments/success_vs_baseline.py` | Stub. Card setups to cover, each vs the 1/10,000 baseline and the 10.7% top-PIN bound: weak and good DTE under format filter, PIN ranking and format + PIN; good DTE with side info (bank, last-4, bank + last-4, bank + last-4 + PIN); two-card k = 2/3/5 with the simple rule and the Bayes rule (Bayes for any rho sweep); and the PIN-ranking setups re-run with `pin_frequencies_uniform_tail.csv` as the sensitivity check |
-| Experiments: AES mode pitfall | Stub |
+| Experiments: AES mode pitfall | In progress: reproducible fixture and CTR acceptance count implemented; GCM/CBC/CLI pending |
 | `data/bin_list.csv` | Done (20 BINs) |
 | `data/pin_frequencies.csv` (+ uniform-tail variant, generator) | Done |
 
@@ -443,10 +444,69 @@ public verification of guessed secrets, not a break of AES or an algorithm for
 factoring an arbitrary RSA modulus without candidate factors. Full encryption,
 10,000-PIN enumeration, and narrated reporting remain tasks 3.2 and 3.3.
 
+### 2026-10-18: Narrated RSA trial and optional arithmetic acceleration (Kee, tasks 3.2-3.3)
+**Decision:** `experiments/demo_rsa.py` composes existing prime generation,
+encryption, all-PIN brute force, and public verification. It generates distinct
+p/q with a recorded seeded RNG, chooses a uniform PIN, and reports all matches,
+distinct factor count, true-PIN survival, actual modulus size, and separate
+enumeration/verification timings. The default uses reduced 16-bit factors.
+**Why:** factor recovery and original-PIN uniqueness are different outcomes.
+The seed-2026 reduced-size example leaves 10 matching PINs across two factors;
+the true PIN survives. Real-size enumeration must be explicitly requested.
+**Reproducibility:** optional non-overwriting JSON output records generated inputs,
+software/backend versions, Git revision/dirty flag, and relevant source hashes.
+Repeated small trials reproduce deterministic fields; timings are measurements.
+**Performance:** 10 1024-bit guesses took 3.653s with the pure-Python SymPy backend,
+estimating roughly 61 minutes. The installed SymPy source confirms automatic
+gmpy2 support; optional gmpy2 2.3.2 was installed in the local environment, without
+making it a mandatory requirement. The same inputs then took 0.484s for 10 guesses,
+estimating roughly 8 minutes. These are estimates; full measurements are recorded
+separately once complete. No DTE/AES/attack algorithm was replaced or prime size
+reduced for speed. Benchmark p/q/N/PIN/ciphertext match across both backends.
+**Where:** `experiments/demo_rsa.py`, `tests/test_demo_rsa.py`, README usage;
+benchmark artifacts in the external OpenSpec change directory. User explicitly
+requested applying tasks 3.2 and 3.3 together for this turn.
+
+### 2026-10-18: Full real-size RSA experiment result (Kee, task 3.3)
+**Measured:** seed 2026, two distinct 1024-bit factors, actual N size 2048 bits,
+176-byte ciphertext, and all 10,000 candidate PINs. Public verification retained
+exactly one PIN-factor pair: PIN `2381`, the true PIN, with the original p.
+Brute-force enumeration took 777.2450963 seconds; verification took 0.045071
+seconds; total measured trial time was 777.6313182 seconds. The approximately
+8-minute accelerated ten-guess estimate understated the actual roughly 13-minute
+run, illustrating why sample timing is not a runtime guarantee.
+**Validation:** inspect p/q size, distinctness and primality predicate, p*q=N,
+every match's proper divisibility, true-PIN membership, counts, and source hashes;
+decrypt the saved ciphertext under the saved true PIN to recover p. Inputs match
+the earlier accelerated benchmark exactly. There is one matching factor/PIN in
+this measured run; uniqueness is not asserted as a universal guarantee.
+**Environment/artifact:** Python 3.11.4, SymPy 1.14.0, cryptography 50.0.2,
+optional gmpy2 2.3.2 (`gmpy` backend). Full record:
+`../openspec/changes/kee-rsa-and-experiments/rsa-1024-full-seed-2026.json`.
+The record includes generated inputs, actual timings, Git dirty state and source
+checksums, because the new demo code was not yet committed. No all-PIN real-size
+run is included in normal pytest.
+
+### 2026-10-18: CTR acceptance comparison reuses the shared cipher helper (Kee, task 4.1)
+**Decision:** use seeded experiment inputs with one 16-byte seed plaintext, salt,
+and true PIN shared by the future three-mode comparison. Prepare separate
+16-byte CTR/CBC IVs and a 12-byte GCM nonce. The CTR branch reuses `derive_key`,
+`ALL_PINS`, and the existing internal `_aes_ctr` helper, leaving the framework
+unchanged. It decrypts under every PIN and counts every output as accepted;
+there is no plaintext-equality, padding, authentication, or DTE-validity check.
+**Why:** the demo measures what a cipher can reject, not whether the original
+seed was recovered. A wrong CTR key still produces bytes. Reusing the existing
+helper avoids a second CTR implementation or a cipher abstraction layer.
+**Validation:** all 10,000 PINs are attempted and accepted, correct-key decryption
+recovers the seed, and a fixed wrong-key example returns different bytes without
+error. Fixture lengths, seeded repeatability, and unknown/unimplemented modes
+are tested. GCM/CBC and the three-mode CLI remain later tasks.
+**Where:** `experiments/aes_mode_pitfall.py`, `tests/test_aes_mode_pitfall.py`.
+The user requested independent work while the full RSA experiment was running;
+this permits task 4.1 before that experiment finishes, without starting 4.2.
+
 ## Open decisions
 
-- RSA experiment: validate the planned 1024-bit demonstration's cost before
-  full enumeration; the DTE's small real-size smoke checks are complete.
 - Correlated card-pair model: which `rho` values to sweep (suggested 0, 0.25, 0.5, 0.75, 1; use the
   Bayes-optimal rule).
 - Presentation date and timeline.

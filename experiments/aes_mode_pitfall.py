@@ -1,19 +1,42 @@
-"""[STUB] Side demo: why HE must use AES-CTR, not GCM or CBC with padding.
+"""AES mode teaching comparison: CTR implemented; GCM/CBC and CLI still pending.
 
-What goes here (about 20 lines):
-  Encrypt the same seed with the same weak PIN-derived key under three modes,
-  then decrypt with all 10,000 PINs and count how many PINs "succeed":
-    - AES-GCM:      only the right PIN passes the tag check -> 1 candidate
-    - AES-CBC+PKCS7: most wrong PINs fail the padding check -> a handful
-    - AES-CTR:      every PIN succeeds -> 10,000 candidates (what HE needs)
-  The point: any integrity or format check on the ciphertext acts as a
-  "wrong PIN" oracle and removes HE's protection before the DTE even matters.
+Acceptance means the cipher's checks permit a guess, not that it recovers the
+original plaintext. CTR has no padding or authentication check to reject PINs.
 """
 
+from random import Random
 
-def count_accepting_pins(mode: str) -> int:
-    raise NotImplementedError
+from framework.he import ALL_PINS, _aes_ctr, derive_key
+
+
+def _comparison_inputs(seed: int) -> dict:
+    """Build shared experiment inputs; each mode gets a suitable separate IV/nonce."""
+    if isinstance(seed, bool) or not isinstance(seed, int):
+        raise TypeError("seed must be an integer")
+    rng = Random(seed)
+    return {
+        "plaintext": rng.randbytes(16), "salt": rng.randbytes(16),
+        "ctr_nonce": rng.randbytes(16), "cbc_iv": rng.randbytes(16),
+        "gcm_nonce": rng.randbytes(12), "true_pin": rng.choice(ALL_PINS),
+    }
+
+
+def count_accepting_pins(mode: str, seed: int = 2026) -> int:
+    """Count accepted PIN guesses for a seeded experiment; currently supports CTR."""
+    if mode in ("GCM", "CBC"):
+        raise NotImplementedError(f"{mode} comparison is not implemented yet")
+    if mode != "CTR":
+        raise ValueError("unknown AES mode; expected CTR, GCM, or CBC")
+    inputs = _comparison_inputs(seed)
+    key = derive_key(inputs["true_pin"], inputs["salt"])
+    body = _aes_ctr(key, inputs["ctr_nonce"], inputs["plaintext"])
+    accepted = 0
+    for pin in ALL_PINS:
+        guess_key = derive_key(pin, inputs["salt"])
+        _aes_ctr(guess_key, inputs["ctr_nonce"], body)
+        accepted += 1  # CTR produces bytes without a padding/tag acceptance check.
+    return accepted
 
 
 if __name__ == "__main__":
-    raise NotImplementedError
+    raise NotImplementedError("three-mode CLI will be added with the CBC task")

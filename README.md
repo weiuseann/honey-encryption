@@ -50,7 +50,7 @@ A wrong PIN decrypts to a random seed, and the DTE turns that seed into a decoy.
 | `attacks/rsa_verify.py` | done | proper-divisor verification; preserves all matching PIN-factor pairs |
 | `experiments/card_pairs.py` | done | correlated real-card wallet generator (`rho`) |
 | `experiments/success_vs_baseline.py` | stub | main results: rank / success vs 1/10,000 |
-| `experiments/aes_mode_pitfall.py` | stub | GCM/CBC vs CTR side demo |
+| `experiments/aes_mode_pitfall.py` | in progress | seeded CTR acceptance implemented; GCM/CBC and CLI pending |
 | `experiments/demo_card_attacks.py` | done | real card's rank under every card attack (`--trials N`) |
 | `experiments/check_bayes_prediction.py` | done | two-card attack: predicted vs measured rank-1 success (`--k`, `--trials`) |
 | `data/` | done | `bin_list.csv`, `pin_frequencies.csv` (+ generator script); see `data/README.md` |
@@ -157,6 +157,56 @@ assert find_real_prime(candidates, 143) == [
 
 Finding a valid factor does not necessarily identify the original PIN uniquely.
 The verifier tests supplied integer candidates; it does not factor N from scratch.
+
+Run the narrated end-to-end demonstration from the repo root:
+
+```powershell
+.\.venv\Scripts\python.exe -m experiments.demo_rsa --bits 16 --seed 2026
+```
+
+It generates distinct p/q, encrypts p, enumerates all 10,000 PINs, and checks
+candidate divisibility against public N. The reduced-size seed-2026 example has
+16-bit factors and a 31-bit modulus: 10 candidate PINs match across both factors.
+The true PIN survives, but this toy example does not recover a unique PIN.
+
+For real-size factors, benchmark first and explicitly select the full run:
+
+```powershell
+# Optional arithmetic acceleration; SymPy detects it automatically.
+.\.venv\Scripts\python.exe -m pip install gmpy2
+.\.venv\Scripts\python.exe -m experiments.demo_rsa --bits 1024 --seed 2026 --benchmark-guesses 10 --benchmark-only
+.\.venv\Scripts\python.exe -m experiments.demo_rsa --bits 1024 --seed 2026 --output results/rsa-1024-seed-2026.json
+```
+
+The first benchmark in our environment estimated about 61 minutes with SymPy's
+pure-Python backend; optional gmpy2 2.3.2 reduced the estimate to about 8 minutes
+for the same inputs. These are extrapolations from 10 guesses, not full-run
+measurements. The original dependencies remain sufficient for correctness.
+
+**Measured full run:** with gmpy2 2.3.2 and seed 2026, all 10,000 guesses took
+777.245 seconds (about 13 minutes); public verification took 0.045071 seconds.
+The 2048-bit modulus had exactly one matching candidate PIN, `2381`, the true
+PIN, and one distinct verified factor. This is one reproducible experiment,
+not a guarantee that every trial identifies a unique PIN. The full record is
+kept outside the repo at
+`../openspec/changes/kee-rsa-and-experiments/rsa-1024-full-seed-2026.json`.
+
+`--output` saves all verified matches, generated demonstration inputs, seed,
+timings, software versions, active SymPy backend, Git state, and source checksums.
+It refuses to overwrite an existing file. Factor size and actual modulus size
+are reported separately: two 1024-bit factors can produce a 2047- or 2048-bit N.
+Normal tests use small all-PIN runs; the full real-size enumeration is explicit.
+
+The AES comparison currently exposes the CTR-only function:
+
+```python
+from experiments.aes_mode_pitfall import count_accepting_pins
+assert count_accepting_pins("CTR", seed=2026) == 10000
+```
+
+It actually attempts every PIN using the shared CTR helper. Acceptance means
+bytes were returned, not that the original seed was recovered. GCM, CBC, and
+the three-mode command-line demonstration are still pending.
 
 ## Randomness rule (reproducibility)
 

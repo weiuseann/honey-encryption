@@ -60,7 +60,7 @@ Core claim
 | Attacks: RSA verify | Done: proper-divisor filter plus small and real-size end-to-end evidence |
 | RSA narrated demo (`experiments/demo_rsa.py`) | Done: small demonstration and full 10,000-PIN 1024-bit run verified and recorded |
 | Experiments: card pairs (`generate_wallet`), demo (`demo_card_attacks.py`), Bayes prediction check (`check_bayes_prediction.py`) | Done |
-| **Next (Kee):** final harness `experiments/success_vs_baseline.py` | In progress: card attack routes, Bayes rho controls/sweep, prior-sensitivity matrix, explicit CLI/suites, separate RSA dispatch, Wilson summaries, CSV/JSON and metadata done. Remaining: plots, integrated evidence review, full matrix execution and results guide. |
+| **Next (Kee):** final harness `experiments/success_vs_baseline.py` | In progress: all attack routes/suites, saved-result charts and 56-configuration three-trial integration review done. Remaining: full statistical matrix execution (8.2) and final results guide/review (8.3). |
 | Experiments: AES mode pitfall | Done: seeded three-mode acceptance comparison, measured counts, CLI, and tests |
 | `data/bin_list.csv` | Done (20 BINs) |
 | `data/pin_frequencies.csv` (+ uniform-tail variant, generator) | Done |
@@ -696,6 +696,50 @@ rerun with recorded seed/options reproduced ranks and summary. Small explicit
 RSA CLI run retained the true PIN among 10 verified PINs; no real-size rerun.
 Saved one-trial rho ranks were 241/293/1/217/1 for 0/.25/.5/.75/1; these validate
 mechanics and do not establish monotonicity or precise probabilities.
+
+### 2026-10-19: Plot saved card rates and guess budgets (Kee, task 7.2)
+**Decision:** use a small headless Matplotlib module that imports result loading,
+not experiment execution. Read cross-checked raw/summary files; group by family,
+prior and wallet size. Export PNG/SVG plus charts.json identifying input hashes,
+saved metadata/summaries and plot-source hash. Refuse existing output folders.
+**Interpretation:** rate points and Wilson endpoints are saved fractions times
+100. CDF uses right-continuous saved rank steps. Show n and units; provide a
+0-0.05% baseline zoom alongside the full scale, explicitly noting clipped
+intervals. Label top-PIN prior as a reference conditional on no extra evidence.
+No CDF confidence band is claimed. Keep legends outside CDF axes.
+**Where:** experiments/plot_results.py, synthetic saved-rank/export tests, README.
+
+### 2026-10-19: Separate wallet, prior, AES and RSA comparisons (Kee, task 7.3)
+**Decision:** require complete k=2/3/5 Bayes rho grids for selected priors; compare
+simple/simple-plus-PIN/Bayes at rho=1 when the simple rule is present. Pair
+calibrated/uniform-tail configurations and paginate at eight rows. Reject
+duplicate configurations and incompatible BIN/per-prior PIN hashes rather
+than silently pooling or mixing models. Do not infer monotonic finite curves.
+**Separate measures:** AES charts count mode-check acceptance; RSA charts count
+enumerated PINs, verified PINs and factors with timing/context. These use saved
+evidence and are never presented as card rank-one rates. Annotated log count
+axes preserve visibility. RSA multiline labels avoid adjacent text collisions.
+**Where:** plotting module/tests and README; no card helper or crypto changes.
+
+### 2026-10-19: Complete small matrix before full evidence run (Kee, task 8.1)
+**Decision:** explicitly select all 56 card configurations with three trials
+each, seed 2026: 168 trials and 4.41 million card decryptions. Save each row,
+audit metadata/options/source/data hashes, load every result, reproduce one
+standalone wallet run, and render all chart families using original AES/RSA
+evidence. Full evidence collection at 1000 trials remains task 8.2.
+**Verified:** all 56 configurations complete; k=3/rho=.5 calibrated Bayes replay
+using recorded seed 2053 matches ranks 1/1023/1 and summary. Original AES/RSA
+source hashes match current crypto code; saved RSA p*q, sizes and verified
+divisor checked independently. No real-size enumeration or AES rerun needed.
+**Charts/tests:** 32 figures exported as PNG/SVG and visually checked; known-rank
+tests check numerical rates, Wilson endpoints and CDF, with crypto calls forbidden
+for plotting. Full suite 425 passed in 70.42s. Post-layout focused verification
+also covers the final RSA label adjustment. With n=3 the uncertainty is wide;
+these are mechanics checks, not precise real-world success estimates.
+**Evidence:** external integration-7-2-7-3-8-1/report.md, coverage.csv, cards/
+manifest/results, replay-check.json, CLI/test logs and figures/charts.json.
+User requested tasks 7.2, 7.3 and 8.1 together. Prior work committed/pushed as
+e69c1c0; this batch remains uncommitted for review. No teammate-owned changes.
 
 ## Open decisions
 

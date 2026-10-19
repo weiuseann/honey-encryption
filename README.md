@@ -408,7 +408,75 @@ Each folder contains `trials.csv`, `summary.csv`, `summary.json`, and
 `metadata.json`. The CSV funnel column stores a JSON dictionary; k/rho are
 blank for single cards. The loader restores types and checks trial counts,
 ranks, and agreement of summaries with raw records. Missing/malformed files
-raise clear errors. Loading never calls encryption. Plotting is still pending.
+raise clear errors. Loading never calls encryption.
+
+### Plot saved evidence
+
+Plotting uses saved files only; it does not call encryption, brute force, or the
+RSA/AES demos. Supply one or more result directories, or a completed suite
+directory. Every chart is exported as PNG and SVG into a new output directory.
+
+```powershell
+.\.venv\Scripts\python.exe -m experiments.plot_results results/smoke-example --output results/smoke-charts
+.\.venv\Scripts\python.exe -m experiments.plot_results results/my-complete-card-suite --kind wallet --output results/wallet-charts
+.\.venv\Scripts\python.exe -m experiments.plot_results results/my-complete-card-suite --kind prior --output results/prior-charts
+```
+
+The default `--kind cards` creates grouped rank-one rates with 95% Wilson
+intervals and empirical success-versus-guess-budget curves. Labels include n,
+DTE/prior and wallet parameters; axes use percentages. Rate points and interval
+endpoints come directly from saved summaries. The 0.01% analytical baseline
+has a separate zoom (with intervals extending beyond the zoom explicitly
+labelled). Nonuniform-prior panels also label the maximum PIN prior as a
+matched-message/no-extra-evidence reference, not an attack-success ceiling.
+
+A rank CDF answers: "In what percentage of trials did the true PIN rank at most
+g?" For saved ranks `[1,2,10,100]`, it is 25% at budget 1 and 75% at budget 10.
+Steps use the saved `rank_cdf`; logarithmic spacing above one keeps small guess
+budgets readable while still showing zero. No CDF confidence band is implied.
+
+`--kind wallet` requires complete Bayes grids for k=2/3/5 and rho=0/.25/.5/.75/1
+for each selected prior. It also compares simple/simple-plus-PIN/Bayes at rho=1
+when simple-rule runs are present. `--kind prior` requires calibrated and
+uniform-tail counterparts for every selected PIN-scored configuration. Prior
+comparisons are split across pages of at most eight configurations. Incomplete
+suites, duplicate configurations and incompatible BIN/per-prior PIN checksums
+raise clear errors; select one saved run per configuration rather than silently
+pooling separate runs. Each point has its own Wilson interval; connecting rho
+points does not assert monotonicity or statistical significance.
+
+AES and RSA use separate count charts, reading their original saved JSON:
+
+```powershell
+.\.venv\Scripts\python.exe -m experiments.plot_results --kind evidence --aes ..\openspec\changes\kee-rsa-and-experiments\aes-mode-comparison-seed-2026.json --rsa ..\openspec\changes\kee-rsa-and-experiments\rsa-1024-full-seed-2026.json --output results/evidence-charts
+```
+
+Use `--kind all` with a complete card suite and `--aes`/`--rsa` to export all
+chart families. AES acceptance is a mode-check count; RSA factor verification
+is a separate count; neither is a card rank-one success percentage. Log count
+axes keep the small counts visible and every bar is annotated with its value.
+`charts.json` records chart names, plot-source SHA-256, original file hashes,
+saved metadata/summaries and evidence-file hashes, so figures trace to inputs.
+
+### Integrated three-trial smoke evidence
+
+The completed integration check is outside the repo at
+`../openspec/changes/kee-rsa-and-experiments/integration-7-2-7-3-8-1/`.
+Its `report.md` links the full coverage inventory, per-run seeds/options, CLI
+log, replay check and final charts. All 56 unique configurations completed with
+three trials each: 168 trials and 4.41 million card decryptions. Every saved
+result loaded correctly, and a k=3/rho=.5 wallet replay with seed 2053 reproduced
+ranks `[1,1023,1]` and its summary. The saved RSA/AES source hashes still match
+the relevant code; existing real-size evidence was reused without re-enumeration.
+
+The final export contains 32 figures, each as PNG and SVG, in `figures/`.
+Known synthetic ranks verify the plotted numbers; tests forbid cryptographic
+execution during plotting. Exported baseline, wallet, sensitivity, AES and RSA
+charts were opened for visual inspection; CDF legends sit outside the axes and
+RSA labels use separate lines to prevent collisions. All 425 tests passed.
+With n=3 the rates jump by 33.3 percentage points and intervals are very wide;
+this checks mechanics and coverage, not precise probabilities. The 1000-trial
+matrix remains the next evidence-collection task.
 
 In the three-trial seed-2026 smoke run, weak-DTE format ranks were 1/1/1;
 the good-DTE ranks stayed 4915/6030/3450. Both generate real cards from the same

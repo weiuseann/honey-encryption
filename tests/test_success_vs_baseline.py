@@ -1,0 +1,108 @@
+"""Validate future setup options and exercise real, small baseline trial batches."""
+
+import pytest
+
+from experiments import success_vs_baseline as harness
+from framework.he import ALL_PINS, decrypt
+
+
+@pytest.mark.parametrize("setup,dtes", list(harness.SETUPS.items()))
+def test_all_declared_setups_validate_without_running(setup, dtes):
+    for dte in dtes:
+        options = harness.validate_setup(setup, 2, 2026, dte=dte)
+        assert options["setup"] == setup
+        assert options["dte"] == dte
+
+
+def test_wallet_options_are_explicit_and_normalized():
+    default = harness.validate_setup("wallet-simple")
+    assert (default["k"], default["rho"]) == (2, 1.0)
+    for k in (2, 3, 5):
+        for rho in (0, 0.25, 0.5, 0.75, 1):
+            assert harness.validate_setup("wallet-bayes-pin", k=k, rho=rho)["rho"] == rho
+    for prior in harness.PRIORS:
+        assert harness.validate_setup("pin", prior=prior)["prior"] == prior
+
+
+@pytest.mark.parametrize("options", [
+    {"setup": "unknown"}, {"setup": None}, {"n_trials": 0},
+    {"n_trials": -1}, {"n_trials": True}, {"n_trials": 1.5},
+    {"seed": True}, {"seed": "2026"}, {"dte": "weak"},
+    {"prior": "unknown"}, {"prior": "calibrated"},
+    {"k": 2}, {"rho": 0.5},
+    {"setup": "side-bank", "dte": "weak"},
+    {"setup": "wallet-simple", "k": 1},
+    {"setup": "wallet-simple", "k": True},
+    {"setup": "wallet-simple", "k": 2.0},
+    {"setup": "wallet-bayes-pin", "rho": -0.1},
+    {"setup": "wallet-bayes-pin", "rho": 1.1},
+    {"setup": "wallet-bayes-pin", "rho": float("nan")},
+    {"setup": "wallet-bayes-pin", "rho": True},
+    {"setup": "wallet-simple", "rho": 0.5},
+    {"setup": "rsa-verify", "dte": "good"},
+    {"setup": "rsa-verify", "dte": "rsa", "prior": "calibrated"},
+])
+def test_invalid_options_fail_before_encryption(options, monkeypatch):
+    def forbidden_encrypt(*args):
+        raise AssertionError("invalid options must not start encryption")
+    monkeypatch.setattr(harness, "encrypt", forbidden_encrypt)
+    arguments = {"setup": "baseline", "n_trials": 1, "seed": 2026, **options}
+    with pytest.raises(ValueError):
+        harness.run_trials(**arguments)
+
+
+@pytest.mark.parametrize("setup,dte", [("pin", "good"), ("wallet-simple", "good"),
+                                      ("rsa-verify", "rsa")])
+def test_valid_future_setups_do_not_silently_run_baselines(setup, dte, monkeypatch):
+    def forbidden_dte():
+        raise AssertionError("not-integrated setups must not start trials")
+    monkeypatch.setattr(harness, "GoodCardDTE", forbidden_dte)
+    with pytest.raises(NotImplementedError, match="not integrated yet"):
+        harness.run_trials(setup, 1, 2026, dte=dte)
+
+
+def test_baseline_uses_real_encryption_and_all_pin_candidates(monkeypatch):
+    encrypted = []
+    candidate_lists = []
+    original_encrypt, original_brute_force = harness.encrypt, harness.brute_force
+
+    def tracked_encrypt(dte, message, pin, rng):
+        ct = original_encrypt(dte, message, pin, rng)
+        encrypted.append((dte, message, pin, ct))
+        return ct
+
+    def tracked_brute_force(ct, dte):
+        candidates = original_brute_force(ct, dte)
+        candidate_lists.append(candidates)
+        return candidates
+
+    monkeypatch.setattr(harness, "encrypt", tracked_encrypt)
+    monkeypatch.setattr(harness, "brute_force", tracked_brute_force)
+    result = harness.run_trials("baseline", 2, 2026)
+    assert result["metadata"]["rank_one_reference"] == 0.0001
+    assert result["summary"] is None
+    for record, candidates, (dte, message, pin, ct) in zip(result["trials"], candidate_lists, encrypted):
+        assert [guess for guess, _ in candidates] == ALL_PINS
+        assert sum(guess == pin for guess, _ in candidates) == 1
+        assert dict(candidates)[pin] == decrypt(dte, ct, pin) == message
+        assert record["true_pin"] == pin
+        assert len(pin) == 4 and pin.isdigit()
+        assert record["candidate_count"] == 10000
+        assert 1 <= record["rank"] <= 10000
+
+
+@pytest.mark.parametrize("setup", ["baseline", "baseline-format"])
+def test_baseline_trials_are_reproducible(setup):
+    first = harness.run_trials(setup, 3, 2026)
+    assert first == harness.run_trials(setup, 3, 2026)
+    assert [row["trial"] for row in first["trials"]] == [1, 2, 3]
+    assert first["metadata"]["seed"] == 2026
+
+
+def test_good_dte_format_control_leaves_all_candidates_and_same_ranks():
+    baseline = harness.run_trials("baseline", 2, 2026)
+    control = harness.run_trials("baseline-format", 2, 2026)
+    for plain, formatted in zip(baseline["trials"], control["trials"]):
+        assert formatted["format_funnel"] == {"all": 10000, "luhn": 10000,
+                                               "network": 10000, "bin": 10000}
+        assert (plain["true_pin"], plain["rank"]) == (formatted["true_pin"], formatted["rank"])

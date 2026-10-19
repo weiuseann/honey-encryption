@@ -60,7 +60,7 @@ Core claim
 | Attacks: RSA verify | Done: proper-divisor filter plus small and real-size end-to-end evidence |
 | RSA narrated demo (`experiments/demo_rsa.py`) | Done: small demonstration and full 10,000-PIN 1024-bit run verified and recorded |
 | Experiments: card pairs (`generate_wallet`), demo (`demo_card_attacks.py`), Bayes prediction check (`check_bayes_prediction.py`) | Done |
-| **Next (Kee):** final harness `experiments/success_vs_baseline.py` | Stub. Card setups to cover, each vs the 1/10,000 baseline and the 10.7% top-PIN bound: weak and good DTE under format filter, PIN ranking and format + PIN; good DTE with side info (bank, last-4, bank + last-4, bank + last-4 + PIN); two-card k = 2/3/5 with the simple rule and the Bayes rule (Bayes for any rho sweep); and the PIN-ranking setups re-run with `pin_frequencies_uniform_tail.csv` as the sensitivity check |
+| **Next (Kee):** final harness `experiments/success_vs_baseline.py` | In progress: validated setup options and reproducible raw baseline/baseline-format trials implemented. Summaries/saving/other integrations pending. Remaining card setups: weak/good under format, PIN and format + PIN; bank, last-4 and combinations; k = 2/3/5 simple/Bayes wallets and Bayes rho sweep; uniform-tail sensitivity checks. Show the 1/10,000 baseline and appropriately qualified top-PIN reference. |
 | Experiments: AES mode pitfall | Done: seeded three-mode acceptance comparison, measured counts, CLI, and tests |
 | `data/bin_list.csv` | Done (20 BINs) |
 | `data/pin_frequencies.csv` (+ uniform-tail variant, generator) | Done |
@@ -532,6 +532,41 @@ cover known valid/invalid padding, correct-key recovery, all-PIN enumeration,
 repeatability, and the CLI without requiring a universal exact CBC count.
 **Where:** AES comparison module/tests and README usage. The existing CTR-only
 framework is unchanged. User explicitly requested tasks 4.2 and 4.3 together.
+
+### 2026-10-19: Harness setup contracts and raw result format (Kee, task 5.1)
+**Decision:** retain `run_trials(setup, n_trials=1000, seed=0)` and add explicit
+keyword DTE/prior/k/rho options. A small table lists allowed setup/DTE pairs;
+`validate_setup` checks and normalizes options without loading data or executing
+an experiment. Priors default to uniform; baseline controls and RSA require it.
+Wallet defaults are k=2/rho=1, allowed k=2/3/5; rho below one requires Bayes.
+Non-wallet setups reject wallet options. Defined but unfinished routes raise
+NotImplementedError before any trial work rather than silently substituting.
+**Why:** explicit names and plain dictionaries keep the teaching harness readable
+and prevent misleading comparisons caused by wrong combinations. No plugin
+system, inheritance, or new configuration framework is needed.
+**Result contract:** return metadata (normalized options, candidate-space size,
+baseline reference), raw trials (one-based trial, setup, true PIN, rank,
+candidate count, optional funnel), and `summary=None` pending statistics.
+This does not claim file saving or other attack integrations are implemented.
+**Where:** `experiments/success_vs_baseline.py`, its new tests, and README table.
+
+### 2026-10-19: Uniform matched-DTE baseline and format-only control (Kee, task 5.2)
+**Decision:** use one seeded Random per run for real-card sampling, uniform PIN
+choice, randomized encryption, and tie shuffling. Sample messages from the good
+DTE, call existing encryption/brute-force helpers, then record the true PIN's
+one-based rank. Baseline scores all candidates equally; baseline-format reuses
+the format ranker and records stage counts. All good-DTE candidates pass, so
+the same seed gives the same ranks in both controls.
+**Measured smoke:** seed 2026 with three trials gives ranks 4915, 6030, 3450
+for true PINs 8385, 6063, 1017; all 10,000 candidates survive each format stage.
+**Why:** the control isolates the matched-message/uniform-key/no-side-info
+assumptions behind the 1/10,000 analytical rank-one baseline. Small Monte Carlo
+runs need not observe a first-guess success and cannot establish zero risk.
+Rank measurement uses the original PIN, not first equal plaintext.
+**Where:** harness/tests/README; tests execute actual encryption and candidate
+enumeration, check recovery, reproducibility, and the all-tied format control.
+User explicitly requested tasks 5.1 and 5.2 together. Summary statistics,
+automatic saving, plotting, and other setups remain later tasks.
 
 ## Open decisions
 

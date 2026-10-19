@@ -49,7 +49,7 @@ A wrong PIN decrypts to a random seed, and the DTE turns that seed into a decoy.
 | `attacks/two_card.py` | done | k cards under one PIN (simple and Bayes-optimal ranking) |
 | `attacks/rsa_verify.py` | done | proper-divisor verification; preserves all matching PIN-factor pairs |
 | `experiments/card_pairs.py` | done | correlated real-card wallet generator (`rho`) |
-| `experiments/success_vs_baseline.py` | stub | main results: rank / success vs 1/10,000 |
+| `experiments/success_vs_baseline.py` | in progress | setup validation and raw matched-DTE baseline trials; other setups/statistics pending |
 | `experiments/aes_mode_pitfall.py` | done | seeded CTR/GCM/CBC acceptance comparison and CLI |
 | `experiments/demo_card_attacks.py` | done | real card's rank under every card attack (`--trials N`) |
 | `experiments/check_bayes_prediction.py` | done | two-card attack: predicted vs measured rank-1 success (`--k`, `--trials`) |
@@ -231,6 +231,54 @@ accepted wrong guesses plus the true guess; the actual count varies. Seed 2026
 gave 45 total. Neither CBC tests nor the demo assume an exact survivor count.
 These rejection checks let an attacker remove decoys before DTE decoding, which
 explains the framework's CTR choice. The shared framework remains unchanged.
+
+## Final harness: baseline stage
+
+The harness currently runs two setups through its Python function:
+
+```python
+from experiments.success_vs_baseline import run_trials
+
+result = run_trials("baseline", n_trials=3, seed=2026)
+print([row["rank"] for row in result["trials"]])  # [4915, 6030, 3450]
+control = run_trials("baseline-format", n_trials=3, seed=2026)
+```
+
+Both draw synthetic cards from the good DTE, choose uniform PINs, encrypt, and
+decrypt under all 10,000 PINs. `baseline` randomly orders equally scored
+candidates. `baseline-format` applies the existing format scorer, but every
+good-DTE candidate passes, so the same seeded tie-breaking gives the same ranks.
+Each control trial records 10,000 survivors at every format stage.
+
+`validate_setup` accepts the following planned configurations without executing
+them. Only the first row is runnable at this stage:
+
+| Setup names | DTE choices | Current state |
+|---|---|---|
+| `baseline`, `baseline-format` | `good` | Runnable, uniform prior only |
+| `format`, `pin`, `format-pin` | `weak`, `good` | Defined; integration pending |
+| `side-bank`, `side-last4`, `side-bank-last4`, `side-bank-last4-pin` | `good` | Defined; integration pending |
+| `wallet-simple`, `wallet-simple-pin`, `wallet-bayes-pin` | `good` | Defined; integration pending |
+| `rsa-verify` | `rsa` | Harness integration pending; standalone RSA demo works |
+
+Keyword options are `dte` (default `good`), `prior` (default `uniform`), `k`,
+and `rho`. Priors are `uniform`, `calibrated`, or `uniform-tail`; the baseline
+controls and planned RSA route require uniform PINs. Wallet defaults are k=2,
+rho=1, with allowed k=2/3/5. Only Bayes wallet ranking allows rho below one.
+Non-wallet setups reject k/rho. Unknown or incompatible options fail before
+encryption; defined future routes raise `NotImplementedError` rather than
+silently running a different experiment. The module CLI is a later task.
+
+The result is a plain dictionary: `metadata` records options and the analytical
+0.0001 rank-one baseline; `trials` contains one-based trial index, setup, true
+four-character PIN, true-PIN rank, and candidate count; `summary` is `None`
+until the statistics task. Format controls also include per-stage counts.
+No automatic saving or plotting is implemented yet.
+
+The three-trial example has no rank-one successes. This is a mechanics check,
+not evidence that success probability is zero: at the 1/10,000 baseline even
+1,000 trials expect only 0.1 successes. Use analytical references and, later,
+confidence intervals rather than demanding exactly 0.01% from a small sample.
 
 ## Randomness rule (reproducibility)
 

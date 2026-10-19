@@ -1,6 +1,10 @@
 """CTR acceptance does not mean the guessed PIN recovered the original seed."""
 
 import pytest
+from cryptography.exceptions import InvalidTag
+from cryptography.hazmat.primitives import padding
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from experiments import aes_mode_pitfall as demo
 from framework.he import ALL_PINS, _aes_ctr, derive_key
@@ -16,7 +20,8 @@ def test_comparison_inputs_are_reproducible_with_suitable_lengths():
     assert inputs["true_pin"] in ALL_PINS
 
 
-def test_ctr_attempts_and_accepts_every_pin(monkeypatch):
+@pytest.mark.parametrize("mode", ["CTR", "GCM", "CBC"])
+def test_each_mode_attempts_every_pin(monkeypatch, mode):
     attempted = []
 
     def tracked_derive_key(pin, salt):
@@ -24,7 +29,10 @@ def test_ctr_attempts_and_accepts_every_pin(monkeypatch):
         return derive_key(pin, salt)
 
     monkeypatch.setattr(demo, "derive_key", tracked_derive_key)
-    assert demo.count_accepting_pins("CTR", seed=2026) == 10_000
+    accepted = demo.count_accepting_pins(mode, seed=2026)
+    assert 1 <= accepted <= 10_000
+    if mode == "CTR":
+        assert accepted == 10_000
     assert attempted == [demo._comparison_inputs(2026)["true_pin"]] + ALL_PINS
 
 
@@ -39,14 +47,73 @@ def test_ctr_correct_key_recovers_seed_wrong_key_still_produces_bytes():
     assert wrong_output != inputs["plaintext"]  # This fixed worked example differs.
 
 
-def test_ctr_count_is_reproducible():
-    assert demo.count_accepting_pins("CTR", 2026) == demo.count_accepting_pins("CTR", 2026)
+@pytest.mark.parametrize("mode", ["CTR", "GCM", "CBC"])
+def test_mode_counts_are_reproducible(mode):
+    assert demo.count_accepting_pins(mode, 2026) == demo.count_accepting_pins(mode, 2026)
 
 
-@pytest.mark.parametrize("mode", ["GCM", "CBC"])
-def test_known_unimplemented_modes_are_explicit(mode):
-    with pytest.raises(NotImplementedError, match="not implemented yet"):
-        demo.count_accepting_pins(mode)
+def test_gcm_true_pin_authenticates_and_wrong_pin_fails():
+    inputs = demo._comparison_inputs(2026)
+    key = derive_key(inputs["true_pin"], inputs["salt"])
+    body = AESGCM(key).encrypt(inputs["gcm_nonce"], inputs["plaintext"], None)
+    assert AESGCM(key).decrypt(inputs["gcm_nonce"], body, None) == inputs["plaintext"]
+    for wrong_pin in [pin for pin in ALL_PINS if pin != inputs["true_pin"]][:3]:
+        with pytest.raises(InvalidTag):
+            AESGCM(derive_key(wrong_pin, inputs["salt"])).decrypt(inputs["gcm_nonce"], body, None)
+
+
+def test_unexpected_gcm_programming_error_is_not_swallowed(monkeypatch):
+    class BrokenGCM:
+        def __init__(self, key):
+            pass
+
+        def encrypt(self, *args):
+            return b"placeholder"
+
+        def decrypt(self, *args):
+            raise RuntimeError("unexpected failure")
+
+    monkeypatch.setattr(demo, "AESGCM", BrokenGCM)
+    with pytest.raises(RuntimeError, match="unexpected failure"):
+        demo.count_accepting_pins("GCM")
+
+
+def test_cbc_true_pin_decrypts_and_unpads_to_original_seed():
+    inputs = demo._comparison_inputs(2026)
+    key = derive_key(inputs["true_pin"], inputs["salt"])
+    padder = padding.PKCS7(128).padder()
+    padded = padder.update(inputs["plaintext"]) + padder.finalize()
+    assert len(padded) == 32  # A full input block gets a whole padding block.
+    encryptor = Cipher(algorithms.AES(key), modes.CBC(inputs["cbc_iv"])).encryptor()
+    body = encryptor.update(padded) + encryptor.finalize()
+    decryptor = Cipher(algorithms.AES(key), modes.CBC(inputs["cbc_iv"])).decryptor()
+    assert demo._unpad(decryptor.update(body) + decryptor.finalize()) == inputs["plaintext"]
+
+
+@pytest.mark.parametrize("padded, expected", [
+    (b"A" * 15 + b"\x01", b"A" * 15),
+    (b"A" * 14 + b"\x02\x02", b"A" * 14),
+    (b"\x10" * 16, b""),
+])
+def test_known_valid_pkcs7_padding(padded, expected):
+    assert demo._unpad(padded) == expected
+
+
+@pytest.mark.parametrize("padded", [b"A" * 16, b"A" * 15 + b"\x00",
+                                     b"A" * 14 + b"\x01\x02", b"short"])
+def test_known_invalid_pkcs7_padding(padded):
+    with pytest.raises(ValueError):
+        demo._unpad(padded)
+
+
+def test_cli_prints_all_three_measured_counts(monkeypatch, capsys):
+    monkeypatch.setattr("sys.argv", ["aes_mode_pitfall", "--seed", "2026"])
+    demo.main()
+    output = capsys.readouterr().out
+    assert "seed = 2026" in output
+    assert "CTR: 10000 accepted" in output
+    assert "GCM:" in output and "CBC:" in output
+    assert "not necessarily recovering" in output
 
 
 def test_unknown_mode_is_rejected():

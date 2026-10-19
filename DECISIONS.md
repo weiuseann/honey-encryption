@@ -61,7 +61,7 @@ Core claim
 | RSA narrated demo (`experiments/demo_rsa.py`) | Done: small demonstration and full 10,000-PIN 1024-bit run verified and recorded |
 | Experiments: card pairs (`generate_wallet`), demo (`demo_card_attacks.py`), Bayes prediction check (`check_bayes_prediction.py`) | Done |
 | **Next (Kee):** final harness `experiments/success_vs_baseline.py` | Stub. Card setups to cover, each vs the 1/10,000 baseline and the 10.7% top-PIN bound: weak and good DTE under format filter, PIN ranking and format + PIN; good DTE with side info (bank, last-4, bank + last-4, bank + last-4 + PIN); two-card k = 2/3/5 with the simple rule and the Bayes rule (Bayes for any rho sweep); and the PIN-ranking setups re-run with `pin_frequencies_uniform_tail.csv` as the sensitivity check |
-| Experiments: AES mode pitfall | In progress: reproducible fixture and CTR acceptance count implemented; GCM/CBC/CLI pending |
+| Experiments: AES mode pitfall | Done: seeded three-mode acceptance comparison, measured counts, CLI, and tests |
 | `data/bin_list.csv` | Done (20 BINs) |
 | `data/pin_frequencies.csv` (+ uniform-tail variant, generator) | Done |
 
@@ -504,6 +504,34 @@ are tested. GCM/CBC and the three-mode CLI remain later tasks.
 **Where:** `experiments/aes_mode_pitfall.py`, `tests/test_aes_mode_pitfall.py`.
 The user requested independent work while the full RSA experiment was running;
 this permits task 4.1 before that experiment finishes, without starting 4.2.
+
+### 2026-10-19: GCM tag verification rejects candidate keys (Kee, task 4.2)
+**Decision:** encrypt the shared fixture with AESGCM, then attempt all 10,000
+PIN-derived keys against the same ciphertext/tag and 12-byte nonce. Count
+successful authentication only. Catch `InvalidTag` specifically; do not compare
+the output to the known secret plaintext or swallow unrelated errors.
+**Why:** the attacker can perform this public acceptance test without knowing
+the plaintext. It reveals wrong PINs before the DTE could provide decoys.
+**Measured:** seed 2026 accepts one guess. Correct-key authentication and
+selected wrong-key failures are tested; the fixture's measured count is not a
+universal claim that false acceptance is mathematically impossible.
+**Where:** `experiments/aes_mode_pitfall.py`, `tests/test_aes_mode_pitfall.py`.
+
+### 2026-10-19: CBC acceptance is valid padding, not plaintext equality (Kee, task 4.3)
+**Decision:** PKCS#7-pad the shared 16-byte seed (adding a complete padding block),
+encrypt using CBC with the fixture's 16-byte IV, and count guesses only when
+unpadding succeeds. Catch `ValueError` only around PKCS#7 unpadding, leaving
+cipher setup and decryption errors visible. Add `--seed` CLI for all three modes.
+**Why:** random decrypted last blocks occasionally have valid padding. Under a
+random-output approximation, acceptance probability is sum(256**(-k), k=1..16),
+about 1/255: roughly 39 wrong guesses plus the correct guess, not a guaranteed
+single-digit count. No equality check against the original plaintext is used.
+**Measured:** seed 2026: CTR 10000, GCM 1, CBC 45 accepted guesses out of 10000
+per mode. CBC therefore accepted 44 wrong guesses in this experiment. Tests
+cover known valid/invalid padding, correct-key recovery, all-PIN enumeration,
+repeatability, and the CLI without requiring a universal exact CBC count.
+**Where:** AES comparison module/tests and README usage. The existing CTR-only
+framework is unchanged. User explicitly requested tasks 4.2 and 4.3 together.
 
 ## Open decisions
 

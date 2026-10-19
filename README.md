@@ -50,7 +50,7 @@ A wrong PIN decrypts to a random seed, and the DTE turns that seed into a decoy.
 | `attacks/rsa_verify.py` | done | proper-divisor verification; preserves all matching PIN-factor pairs |
 | `experiments/card_pairs.py` | done | correlated real-card wallet generator (`rho`) |
 | `experiments/success_vs_baseline.py` | stub | main results: rank / success vs 1/10,000 |
-| `experiments/aes_mode_pitfall.py` | in progress | seeded CTR acceptance implemented; GCM/CBC and CLI pending |
+| `experiments/aes_mode_pitfall.py` | done | seeded CTR/GCM/CBC acceptance comparison and CLI |
 | `experiments/demo_card_attacks.py` | done | real card's rank under every card attack (`--trials N`) |
 | `experiments/check_bayes_prediction.py` | done | two-card attack: predicted vs measured rank-1 success (`--k`, `--trials`) |
 | `data/` | done | `bin_list.csv`, `pin_frequencies.csv` (+ generator script); see `data/README.md` |
@@ -197,16 +197,40 @@ It refuses to overwrite an existing file. Factor size and actual modulus size
 are reported separately: two 1024-bit factors can produce a 2047- or 2048-bit N.
 Normal tests use small all-PIN runs; the full real-size enumeration is explicit.
 
-The AES comparison currently exposes the CTR-only function:
+Run the complete AES acceptance comparison:
+
+```powershell
+.\.venv\Scripts\python.exe -m experiments.aes_mode_pitfall --seed 2026
+```
+
+Measured seed-2026 results, with all 10,000 PINs attempted in each mode:
+
+| Mode | Accepted guesses | Acceptance check |
+|---|---:|---|
+| CTR | 10000 | None |
+| GCM | 1 | Authentication tag |
+| CBC + PKCS#7 | 45 | Valid padding |
+
+The function is also available directly:
 
 ```python
 from experiments.aes_mode_pitfall import count_accepting_pins
 assert count_accepting_pins("CTR", seed=2026) == 10000
 ```
 
-It actually attempts every PIN using the shared CTR helper. Acceptance means
-bytes were returned, not that the original seed was recovered. GCM, CBC, and
-the three-mode command-line demonstration are still pending.
+Each mode uses the same seed plaintext, salt, true PIN, and key derivation,
+with a suitable separate IV/nonce. Acceptance means the mode's checks pass, not
+necessarily that the original plaintext was recovered. Only the expected tag
+or padding failure is treated as a rejected guess; programming errors propagate.
+
+GCM's tag rejects wrong keys with overwhelming probability; the count of one
+is the observation for this fixture. CBC is weaker as a key check: a random
+final block has valid PKCS#7 padding with probability approximately
+`1/256 + 1/256**2 + ... + 1/256**16`, about 1/255. That predicts roughly 39
+accepted wrong guesses plus the true guess; the actual count varies. Seed 2026
+gave 45 total. Neither CBC tests nor the demo assume an exact survivor count.
+These rejection checks let an attacker remove decoys before DTE decoding, which
+explains the framework's CTR choice. The shared framework remains unchanged.
 
 ## Randomness rule (reproducibility)
 

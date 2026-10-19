@@ -49,7 +49,8 @@ A wrong PIN decrypts to a random seed, and the DTE turns that seed into a decoy.
 | `attacks/two_card.py` | done | k cards under one PIN (simple and Bayes-optimal ranking) |
 | `attacks/rsa_verify.py` | done | proper-divisor verification; preserves all matching PIN-factor pairs |
 | `experiments/card_pairs.py` | done | correlated real-card wallet generator (`rho`) |
-| `experiments/success_vs_baseline.py` | in progress | setup validation and raw matched-DTE baseline trials; other setups/statistics pending |
+| `experiments/success_vs_baseline.py` | in progress | baseline/format trials, summaries; remaining attacks/CLI pending |
+| `experiments/results.py` | done for current runs | rank summaries, reproducibility metadata, CSV/JSON save/load |
 | `experiments/aes_mode_pitfall.py` | done | seeded CTR/GCM/CBC acceptance comparison and CLI |
 | `experiments/demo_card_attacks.py` | done | real card's rank under every card attack (`--trials N`) |
 | `experiments/check_bayes_prediction.py` | done | two-card attack: predicted vs measured rank-1 success (`--k`, `--trials`) |
@@ -232,9 +233,9 @@ gave 45 total. Neither CBC tests nor the demo assume an exact survivor count.
 These rejection checks let an attacker remove decoys before DTE decoding, which
 explains the framework's CTR choice. The shared framework remains unchanged.
 
-## Final harness: baseline stage
+## Final harness: baseline and format stage
 
-The harness currently runs two setups through its Python function:
+The harness currently runs baseline controls and weak/good format experiments:
 
 ```python
 from experiments.success_vs_baseline import run_trials
@@ -242,6 +243,8 @@ from experiments.success_vs_baseline import run_trials
 result = run_trials("baseline", n_trials=3, seed=2026)
 print([row["rank"] for row in result["trials"]])  # [4915, 6030, 3450]
 control = run_trials("baseline-format", n_trials=3, seed=2026)
+weak = run_trials("format", n_trials=3, seed=2026, dte="weak")
+good = run_trials("format", n_trials=3, seed=2026, dte="good")
 ```
 
 Both draw synthetic cards from the good DTE, choose uniform PINs, encrypt, and
@@ -250,13 +253,13 @@ candidates. `baseline-format` applies the existing format scorer, but every
 good-DTE candidate passes, so the same seeded tie-breaking gives the same ranks.
 Each control trial records 10,000 survivors at every format stage.
 
-`validate_setup` accepts the following planned configurations without executing
-them. Only the first row is runnable at this stage:
+`validate_setup` also accepts planned configurations without executing them:
 
 | Setup names | DTE choices | Current state |
 |---|---|---|
 | `baseline`, `baseline-format` | `good` | Runnable, uniform prior only |
-| `format`, `pin`, `format-pin` | `weak`, `good` | Defined; integration pending |
+| `format` | `weak`, `good` | Runnable with uniform PINs |
+| `pin`, `format-pin` | `weak`, `good` | Defined; integration pending |
 | `side-bank`, `side-last4`, `side-bank-last4`, `side-bank-last4-pin` | `good` | Defined; integration pending |
 | `wallet-simple`, `wallet-simple-pin`, `wallet-bayes-pin` | `good` | Defined; integration pending |
 | `rsa-verify` | `rsa` | Harness integration pending; standalone RSA demo works |
@@ -267,13 +270,44 @@ controls and planned RSA route require uniform PINs. Wallet defaults are k=2,
 rho=1, with allowed k=2/3/5. Only Bayes wallet ranking allows rho below one.
 Non-wallet setups reject k/rho. Unknown or incompatible options fail before
 encryption; defined future routes raise `NotImplementedError` rather than
-silently running a different experiment. The module CLI is a later task.
+silently running a different experiment. Nonuniform sampling is still pending
+even for the format route; it is added with PIN integration. The module CLI is
+a later task.
 
-The result is a plain dictionary: `metadata` records options and the analytical
-0.0001 rank-one baseline; `trials` contains one-based trial index, setup, true
-four-character PIN, true-PIN rank, and candidate count; `summary` is `None`
-until the statistics task. Format controls also include per-stage counts.
-No automatic saving or plotting is implemented yet.
+The result is a plain dictionary. `metadata` records options, analytical 0.0001
+baseline, maximum-PIN-prior reference with its assumptions, elapsed time, and
+an environment snapshot (UTC time, versions, Git revision/dirty state, source
+and actually used data-file checksums). `trials` contains index, setup, DTE,
+prior, k/rho, four-character true PIN, rank, and candidate count. Format rows
+also contain cumulative survivor counts. PINs remain text, preserving zeroes.
+
+`summary` reports trial count, rank-one successes/rate, 95% Wilson interval,
+median rank, success at guess budgets 1/10/100/1000/10000, and empirical rank CDF.
+For ranks `[1,2,1,4]`, success is 2/4=50%, median is 1.5, and the Wilson interval
+is approximately 15.0%-85.0%. Rates are fractions (0.5 means 50%). The maximum
+PIN prior is a matched-message/no-extra-evidence reference, not a ceiling for
+format mismatch or side-information attacks.
+
+Save and reload a new output folder explicitly:
+
+```python
+from experiments.results import save_results, load_results
+save_results(weak, "results/format-weak-example")  # Refuses an existing folder.
+restored = load_results("results/format-weak-example")
+assert restored == weak
+```
+
+Each folder contains `trials.csv`, `summary.csv`, `summary.json`, and
+`metadata.json`. The CSV funnel column stores a JSON dictionary; k/rho are
+blank for single cards. The loader restores types and checks trial counts,
+ranks, and agreement of summaries with raw records. Missing/malformed files
+raise clear errors. Loading never calls encryption. Plotting is still pending.
+
+In the three-trial seed-2026 smoke run, weak-DTE format ranks were 1/1/1;
+the good-DTE ranks stayed 4915/6030/3450. Both generate real cards from the same
+good model; only the encoding DTE changes. Weak final BIN counts were 1/1/1,
+while every good-DTE format stage retained 10000 candidates. This validates
+integration; three trials do not establish a precise attack success rate.
 
 The three-trial example has no rank-one successes. This is a mechanics check,
 not evidence that success probability is zero: at the 1/10,000 baseline even

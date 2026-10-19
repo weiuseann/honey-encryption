@@ -60,7 +60,7 @@ Core claim
 | Attacks: RSA verify | Done: proper-divisor filter plus small and real-size end-to-end evidence |
 | RSA narrated demo (`experiments/demo_rsa.py`) | Done: small demonstration and full 10,000-PIN 1024-bit run verified and recorded |
 | Experiments: card pairs (`generate_wallet`), demo (`demo_card_attacks.py`), Bayes prediction check (`check_bayes_prediction.py`) | Done |
-| **Next (Kee):** final harness `experiments/success_vs_baseline.py` | In progress: validated setup options and reproducible raw baseline/baseline-format trials implemented. Summaries/saving/other integrations pending. Remaining card setups: weak/good under format, PIN and format + PIN; bank, last-4 and combinations; k = 2/3/5 simple/Bayes wallets and Bayes rho sweep; uniform-tail sensitivity checks. Show the 1/10,000 baseline and appropriately qualified top-PIN reference. |
+| **Next (Kee):** final harness `experiments/success_vs_baseline.py` | In progress: baseline/format controls, weak/good format trials, Wilson summaries, CSV/JSON save/load and reproducibility metadata done. Remaining: PIN/combined ranking, side info, wallets/rho, sensitivity studies, CLI/plots/full matrix. |
 | Experiments: AES mode pitfall | Done: seeded three-mode acceptance comparison, measured counts, CLI, and tests |
 | `data/bin_list.csv` | Done (20 BINs) |
 | `data/pin_frequencies.csv` (+ uniform-tail variant, generator) | Done |
@@ -567,6 +567,50 @@ Rank measurement uses the original PIN, not first equal plaintext.
 enumeration, check recovery, reproducibility, and the all-tied format control.
 User explicitly requested tasks 5.1 and 5.2 together. Summary statistics,
 automatic saving, plotting, and other setups remain later tasks.
+
+### 2026-10-19: Rank summaries use Wilson intervals and empirical guess budgets (Kee, task 5.3)
+**Decision:** use the existing SciPy binomial-test Wilson interval API at 95%
+confidence. Summarize original-PIN ranks with successes/count/rate, interval,
+median, success at budgets 1/10/100/1000/10000, and the empirical CDF. Validate
+nonempty integer ranks in 1..10000. Compute the maximum PIN prior from the loaded
+table when requested, labelling it as a matched-message/no-extra-evidence reference.
+**Why:** zero observed successes do not prove zero probability. For 0/1000,
+the Wilson upper endpoint is about 0.00382676 (0.383%), despite an observed zero.
+Known ranks [1,2,1,4] give 50% success, median 1.5, interval about 15%-85%.
+No custom statistics framework or new dependency is required.
+**Where:** `experiments/results.py`, summary tests, harness metadata/summary.
+
+### 2026-10-19: Result folders preserve raw evidence and software/data identity (Kee, task 5.4)
+**Decision:** explicitly save a new directory containing trials.csv, summary.csv,
+summary.json, and metadata.json; refuse an existing directory. Keep PIN strings
+as text and serialize optional format funnels as JSON CSV cells. Load without
+running experiments, restoring numerical types and checking counts/summaries.
+**Reproducibility:** capture settings, per-run seed, actual n, elapsed seconds,
+UTC timestamp, Python/dependency versions, Git revision/dirty flag, relevant
+source hashes, and hashes of actual data inputs before running. Normalize data
+identifiers with forward slashes for portability. Compare seeded results excluding
+elapsed time and creation timestamp; everything deterministic must agree.
+**Why:** figures and reports must trace to inspectable trial evidence and be
+reusable without repeating cryptography. Metadata reflects uncommitted source
+honestly through dirty state and checksums. No database or generic storage layer.
+**Where:** result helpers/tests and README output schema. Small saved examples
+are outside the repo under the external OpenSpec change's
+`harness-smoke-5-3-5-4-6-1/` directory.
+
+### 2026-10-19: Format experiment changes the encoder, not the real-card model (Kee, task 6.1)
+**Decision:** sample all victim cards with GoodCardDTE.sample, then encrypt using
+the selected weak/good DTE. Reuse the good model's BIN metadata and existing
+format ranker/funnel. PINs remain uniform for this stage; nonuniform sampling
+and popularity ranking belong to the next task.
+**Measured smoke:** seed 2026, three weak runs have rank 1 each and final BIN
+count 1 each. Good runs have ranks 4915/6030/3450, with 10000 candidates passing
+every check. The baseline and good-format control agree exactly. These are
+mechanics checks, not precise estimated real-world success probabilities.
+**Why:** weak-DTE decoys mismatch the real-card format; good-DTE decoys pass the
+same public checks as real cards. Tests verify monotonic funnels, true-card
+survival, actual weak/good encryption routes, and controlled invalid decoys.
+**Where:** harness/tests/README; Seann's DTE/filter/ranking code is unchanged.
+User explicitly requested tasks 5.3, 5.4, and 6.1 together.
 
 ## Open decisions
 

@@ -80,7 +80,8 @@ def test_baseline_uses_real_encryption_and_all_pin_candidates(monkeypatch):
     monkeypatch.setattr(harness, "brute_force", tracked_brute_force)
     result = harness.run_trials("baseline", 2, 2026)
     assert result["metadata"]["rank_one_reference"] == 0.0001
-    assert result["summary"] is None
+    assert result["summary"]["n_trials"] == 2
+    assert result["metadata"]["max_pin_prior_reference"] == 0.0001
     for record, candidates, (dte, message, pin, ct) in zip(result["trials"], candidate_lists, encrypted):
         assert [guess for guess, _ in candidates] == ALL_PINS
         assert sum(guess == pin for guess, _ in candidates) == 1
@@ -94,7 +95,11 @@ def test_baseline_uses_real_encryption_and_all_pin_candidates(monkeypatch):
 @pytest.mark.parametrize("setup", ["baseline", "baseline-format"])
 def test_baseline_trials_are_reproducible(setup):
     first = harness.run_trials(setup, 3, 2026)
-    assert first == harness.run_trials(setup, 3, 2026)
+    second = harness.run_trials(setup, 3, 2026)
+    for result in (first, second):
+        result["metadata"].pop("elapsed_seconds")
+        result["metadata"]["environment"].pop("created_utc")
+    assert first == second
     assert [row["trial"] for row in first["trials"]] == [1, 2, 3]
     assert first["metadata"]["seed"] == 2026
 
@@ -106,3 +111,59 @@ def test_good_dte_format_control_leaves_all_candidates_and_same_ranks():
         assert formatted["format_funnel"] == {"all": 10000, "luhn": 10000,
                                                "network": 10000, "bin": 10000}
         assert (plain["true_pin"], plain["rank"]) == (formatted["true_pin"], formatted["rank"])
+
+
+@pytest.mark.parametrize("dte_name", ["weak", "good"])
+def test_format_setup_runs_with_real_cards_and_correct_encoder(dte_name, monkeypatch):
+    encrypted = []
+    original_encrypt = harness.encrypt
+
+    def track(dte, card, pin, rng):
+        encrypted.append((dte, card))
+        return original_encrypt(dte, card, pin, rng)
+
+    monkeypatch.setattr(harness, "encrypt", track)
+    result = harness.run_trials("format", 2, 2026, dte=dte_name)
+    good = harness.GoodCardDTE()
+    for row, (encoder, card) in zip(result["trials"], encrypted):
+        assert type(encoder).__name__ == ("WeakCardDTE" if dte_name == "weak" else "GoodCardDTE")
+        good.encode(card)  # Real card is valid under the same good model in both runs.
+        counts = list(row["format_funnel"].values())
+        assert counts[0] == 10000
+        assert all(a >= b for a, b in zip(counts, counts[1:]))
+        assert counts[-1] >= 1
+        if dte_name == "good":
+            assert counts == [10000] * 4
+
+
+def test_format_composes_existing_filter_with_invalid_decoys(monkeypatch):
+    original_encrypt = harness.encrypt
+    captured = {}
+
+    def encrypt(dte, card, pin, rng):
+        captured.update(card=card, pin=pin)
+        return original_encrypt(dte, card, pin, rng)
+
+    def candidates(ct, dte):
+        # Only the chosen true PIN recovers the real card in this controlled fixture.
+        rows = [(pin, "0000000000000001") for pin in ALL_PINS]
+        pin = captured["pin"]
+        rows[int(pin)] = (pin, captured["card"])
+        return rows
+
+    monkeypatch.setattr(harness, "encrypt", encrypt)
+    monkeypatch.setattr(harness, "brute_force", candidates)
+    result = harness.run_trials("format", 1, 2026, dte="weak")
+    row = result["trials"][0]
+    assert row["rank"] == 1
+    assert row["format_funnel"] == {"all": 10000, "luhn": 1, "network": 1, "bin": 1}
+
+
+def test_nonuniform_format_sampling_is_explicitly_pending():
+    with pytest.raises(NotImplementedError, match="non-uniform PIN sampling"):
+        harness.run_trials("format", 1, 2026, prior="calibrated")
+
+
+@pytest.mark.parametrize("prior", ["calibrated", "uniform-tail"])
+def test_loaded_pin_reference_is_computed_from_table(prior):
+    assert harness.max_pin_prior(prior) == pytest.approx(0.10713)

@@ -60,7 +60,7 @@ Core claim
 | Attacks: RSA verify | Done: proper-divisor filter plus small and real-size end-to-end evidence |
 | RSA narrated demo (`experiments/demo_rsa.py`) | Done: small demonstration and full 10,000-PIN 1024-bit run verified and recorded |
 | Experiments: card pairs (`generate_wallet`), demo (`demo_card_attacks.py`), Bayes prediction check (`check_bayes_prediction.py`) | Done |
-| **Next (Kee):** final harness `experiments/success_vs_baseline.py` | In progress: baseline/format controls, weak/good format trials, Wilson summaries, CSV/JSON save/load and reproducibility metadata done. Remaining: PIN/combined ranking, side info, wallets/rho, sensitivity studies, CLI/plots/full matrix. |
+| **Next (Kee):** final harness `experiments/success_vs_baseline.py` | In progress: baseline/format controls, PIN/combined ranking, side info, rho=1 wallets, Wilson summaries, CSV/JSON save/load and metadata done. Remaining: rho controls/sweep, sensitivity studies, RSA harness integration, CLI/plots/full matrix. |
 | Experiments: AES mode pitfall | Done: seeded three-mode acceptance comparison, measured counts, CLI, and tests |
 | `data/bin_list.csv` | Done (20 BINs) |
 | `data/pin_frequencies.csv` (+ uniform-tail variant, generator) | Done |
@@ -611,6 +611,44 @@ same public checks as real cards. Tests verify monotonic funnels, true-card
 survival, actual weak/good encryption routes, and controlled invalid decoys.
 **Where:** harness/tests/README; Seann's DTE/filter/ranking code is unchanged.
 User explicitly requested tasks 5.3, 5.4, and 6.1 together.
+
+### 2026-10-19: Matched PIN priors and format-first composition (Kee, task 6.2)
+**Decision:** load the selected nonuniform table once, draw victim PINs with
+sample_pins, and reuse those frequencies for popularity scoring and the maximum
+prior reference. Record the actual table checksum. Uniform remains the default
+and retains the previous RNG draw order; nonuniform draws are batched first.
+Combined ranking uses (checks_passed, probability), with seeded random ties.
+**Why:** comparing victims drawn from one prior with an attacker using another
+would introduce an unrequested mismatch. Public format evidence takes priority
+over popularity. The alternate prior can be selected individually; sensitivity
+suite orchestration remains task 6.6. No universal lower-bound claim is inferred
+from the partially modelled PIN tail or assumed BIN weights.
+**Where:** harness, integration tests, README; Seann's helpers unchanged.
+
+### 2026-10-19: Expose only declared accurate side information (Kee, task 6.3)
+**Decision:** derive the victim bank from the same BIN metadata and last four
+from the actual card. Pass only the facts named by the selected setup. Only
+the combined-plus-PIN route receives popularity scores. All use good DTE.
+**Why:** accidentally supplying an extra fact would inflate measured success.
+These trials assume accurate information; they do not model noisy observations.
+**Where:** harness routing and tests of the actual arguments/recovery.
+
+### 2026-10-19: Reuse correlated wallet pipeline at rho one (Kee, task 6.4)
+**Decision:** use generate_wallet/encrypt_wallet/brute_force_wallet/rank_wallets
+directly for k=2/3/5. One PIN protects all cards with fresh salts/nonces; each
+guess produces one candidate tuple. Simple ranking receives rho=None; Bayes
+receives numeric rho=1. Store normalized k/rho in metadata and trial rows.
+**Why:** individually matched cards can still reveal cross-card correlation.
+Bayes weights a same-bank match by q_bank**(1-k), so rarer matches carry more
+evidence. Non-unit rho execution remains explicitly pending task 6.5.
+**Where:** harness/tests/README. No teammate-owned implementation changed.
+User explicitly requested tasks 6.2, 6.3, and 6.4 together after commit/push.
+**Verification for the batch:** full suite 386 passed in 62.39s; diff whitespace
+check passed. Eleven three-trial seed-2026 calibrated-prior runs were saved and
+reloaded externally. Good-DTE PIN ranks were 248/247/235; combined bank/last4/PIN
+ranks 1/1/1; k=2 simple-plus-PIN 54/35/52 and Bayes-plus-PIN 86/9/4. These tiny
+runs check mechanics, not precise rates; Bayes need not win every individual
+trial. Detailed traces and artifacts live with the external OpenSpec change.
 
 ## Open decisions
 

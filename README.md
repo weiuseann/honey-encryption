@@ -258,10 +258,10 @@ Each control trial records 10,000 survivors at every format stage.
 | Setup names | DTE choices | Current state |
 |---|---|---|
 | `baseline`, `baseline-format` | `good` | Runnable, uniform prior only |
-| `format` | `weak`, `good` | Runnable with uniform PINs |
-| `pin`, `format-pin` | `weak`, `good` | Defined; integration pending |
-| `side-bank`, `side-last4`, `side-bank-last4`, `side-bank-last4-pin` | `good` | Defined; integration pending |
-| `wallet-simple`, `wallet-simple-pin`, `wallet-bayes-pin` | `good` | Defined; integration pending |
+| `format` | `weak`, `good` | Runnable |
+| `pin`, `format-pin` | `weak`, `good` | Runnable |
+| `side-bank`, `side-last4`, `side-bank-last4`, `side-bank-last4-pin` | `good` | Runnable, accurate side information |
+| `wallet-simple`, `wallet-simple-pin`, `wallet-bayes-pin` | `good` | Runnable, k=2/3/5 and rho=1 |
 | `rsa-verify` | `rsa` | Harness integration pending; standalone RSA demo works |
 
 Keyword options are `dte` (default `good`), `prior` (default `uniform`), `k`,
@@ -270,9 +270,42 @@ controls and planned RSA route require uniform PINs. Wallet defaults are k=2,
 rho=1, with allowed k=2/3/5. Only Bayes wallet ranking allows rho below one.
 Non-wallet setups reject k/rho. Unknown or incompatible options fail before
 encryption; defined future routes raise `NotImplementedError` rather than
-silently running a different experiment. Nonuniform sampling is still pending
-even for the format route; it is added with PIN integration. The module CLI is
-a later task.
+silently running a different experiment. Rho below one remains pending task 6.5;
+the module CLI and sensitivity-suite orchestration are later tasks.
+
+For popularity experiments, select `prior="calibrated"` explicitly; the default
+stays uniform. The chosen table is loaded once and used for victim PIN sampling
+and popularity scoring. `format-pin` sorts by `(format checks passed, PIN
+probability)`, so a valid card precedes an invalid card even with a less popular
+PIN. Ties use the seeded RNG. Nonuniform draws are sampled in one batch before
+the trials; uniform runs retain their original per-trial draw order. Metadata
+hashes the actual PIN table used, including the alternate `uniform-tail` table.
+
+Side-information routes reveal exactly their named facts: bank, last four,
+or both. Only `side-bank-last4-pin` also uses popularity. Bank comes from the
+real card's BIN metadata, and last four from its suffix. Accurate facts keep
+the true candidate consistent; incorrect or noisy information is outside this model.
+
+Wallet routes reuse the existing correlated generator, wallet encryption,
+all-PIN decryption, and ranking helpers. At rho=1 all real cards share a bank.
+Each card has fresh salt/nonce, but the same victim PIN. A candidate is
+`(guessed_pin, (card_1, ..., card_k))`; 10000 guesses yield 10000 wallets.
+`wallet-simple` uses same-bank consistency alone; `wallet-simple-pin` adds
+popularity; `wallet-bayes-pin` uses popularity times the wallet likelihood
+ratio. For a same-bank k-card wallet at rho=1 that ratio is `q_bank**(1-k)`;
+mixed-bank wallets score zero. Simple ranking passes `rho=None` to the helper;
+the generator and recorded experiment options still use rho=1.
+
+```python
+popular = run_trials("pin", 3, 2026, prior="calibrated")
+combined = run_trials("format-pin", 3, 2026, dte="weak", prior="calibrated")
+side = run_trials("side-bank-last4-pin", 3, 2026, prior="calibrated")
+wallet = run_trials("wallet-bayes-pin", 3, 2026, prior="calibrated", k=2)
+```
+
+These are synthetic model experiments: BIN weights are assumed and PIN tails
+are modelled from partial published frequencies. A few smoke trials check the
+pipeline, not real-world success rates or a universal lower bound.
 
 The result is a plain dictionary. `metadata` records options, analytical 0.0001
 baseline, maximum-PIN-prior reference with its assumptions, elapsed time, and

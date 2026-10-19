@@ -1,4 +1,4 @@
-"""Reproducible baseline and format-filter trials with rank summaries.
+"""Reproducible card-attack trials with rank summaries.
 
 Other setup names are validated for later integration, not silently substituted.
 Results contain metadata, raw trial records, and statistical summaries.
@@ -9,11 +9,15 @@ from random import Random
 from time import perf_counter
 
 from attacks.brute_force import brute_force
-from attacks.format_filter import funnel, rank_by_format
-from attacks.pin_ranking import UNIFORM_TAIL_PIN_PATH, load_pin_frequencies
+from attacks.format_filter import checks_passed, funnel, rank_by_format
+from attacks.pin_ranking import (PIN_PATH, UNIFORM_TAIL_PIN_PATH, load_pin_frequencies,
+                                 rank_by_pin_popularity, sample_pins)
 from attacks.ranking import order_by_score, rank_of
-from dte.good_card import BIN_PATH, GoodCardDTE
+from attacks.side_info import rank_by_side_info
+from attacks.two_card import brute_force_wallet, rank_wallets
+from dte.good_card import BIN_DIGITS, BIN_PATH, GoodCardDTE
 from dte.weak_card import WeakCardDTE
+from experiments.card_pairs import encrypt_wallet, generate_wallet
 from experiments.results import capture_environment, summarize_ranks
 from framework.he import ALL_PINS, encrypt
 
@@ -80,37 +84,69 @@ def run_trials(setup: str, n_trials: int = 1000, seed: int = 0, *,
                k: int | None = None, rho: float | None = None) -> dict:
     """Return raw trials, reproducibility metadata, and rank summaries; no automatic saving."""
     options = validate_setup(setup, n_trials, seed, dte=dte, prior=prior, k=k, rho=rho)
-    if setup not in ("baseline", "baseline-format", "format"):
+    if setup == "rsa-verify":
         raise NotImplementedError(f"{setup} is defined but not integrated yet")
-    if prior != "uniform":
-        raise NotImplementedError("non-uniform PIN sampling will be integrated with PIN ranking")
+    k, rho = options["k"], options["rho"]
+    if setup.startswith("wallet-") and rho != 1:
+        raise NotImplementedError("wallet rho controls and sweeps belong to task 6.5")
 
     started = perf_counter()
-    environment = capture_environment([BIN_PATH])
+    data_paths = [BIN_PATH]
+    if prior == "uniform":
+        freqs = dict.fromkeys(ALL_PINS, 1 / len(ALL_PINS))
+    else:
+        pin_path = PIN_PATH if prior == "calibrated" else UNIFORM_TAIL_PIN_PATH
+        freqs = load_pin_frequencies(pin_path)
+        data_paths.append(pin_path)
+    environment = capture_environment(data_paths)
     rng = Random(seed)
+    # Build cumulative sampling weights once; preserve the existing uniform draw order.
+    victim_pins = sample_pins(freqs, n_trials, rng) if prior != "uniform" else None
     good = GoodCardDTE()
     encoder = good if dte == "good" else WeakCardDTE()
+    bin_set = {entry.bin for entry in good.bins}
+    bin_to_bank = {entry.bin: entry.bank for entry in good.bins}
     trials = []
     for trial in range(1, n_trials + 1):
-        card = good.sample(rng)
-        pin = rng.choice(ALL_PINS)
-        ciphertext = encrypt(encoder, card, pin, rng)
-        candidates = brute_force(ciphertext, encoder)
-        if setup == "baseline":
-            ranked = order_by_score(candidates, lambda candidate: 0, rng)
+        if setup.startswith("wallet-"):
+            cards = generate_wallet(good, k, rho, rng)
+            pin = victim_pins[trial - 1] if victim_pins is not None else rng.choice(ALL_PINS)
+            ciphertexts = encrypt_wallet(good, cards, pin, rng)
+            candidates = brute_force_wallet(ciphertexts, good)
+            ranked = rank_wallets(
+                candidates, freqs=None if setup == "wallet-simple" else freqs,
+                rho=rho if setup == "wallet-bayes-pin" else None, bins=good.bins, rng=rng)
         else:
-            ranked = rank_by_format(candidates, good.bins, rng)
+            card = good.sample(rng)
+            pin = victim_pins[trial - 1] if victim_pins is not None else rng.choice(ALL_PINS)
+            ciphertext = encrypt(encoder, card, pin, rng)
+            candidates = brute_force(ciphertext, encoder)
+            if setup == "baseline":
+                ranked = order_by_score(candidates, lambda candidate: 0, rng)
+            elif setup in ("baseline-format", "format"):
+                ranked = rank_by_format(candidates, good.bins, rng)
+            elif setup == "pin":
+                ranked = rank_by_pin_popularity(candidates, freqs, rng)
+            elif setup == "format-pin":
+                ranked = order_by_score(
+                    candidates, lambda c: (checks_passed(c[1], bin_set), freqs[c[0]]), rng)
+            else:
+                ranked = rank_by_side_info(
+                    candidates,
+                    bank=bin_to_bank[card[:BIN_DIGITS]] if "bank" in setup else None,
+                    last4=card[-4:] if "last4" in setup else None,
+                    freqs=freqs if setup.endswith("-pin") else None, bins=good.bins, rng=rng)
         record = {"trial": trial, "setup": setup, "dte": dte, "prior": prior,
                   "k": k, "rho": rho, "true_pin": pin,
                   "rank": rank_of(ranked, pin), "candidate_count": len(candidates)}
-        if setup in ("baseline-format", "format"):
+        if setup in ("baseline-format", "format", "format-pin"):
             record["format_funnel"] = funnel(candidates, good.bins)
         trials.append(record)
 
     return {
         "metadata": {**options, "candidate_space": len(ALL_PINS),
                      "rank_one_reference": 1 / len(ALL_PINS),
-                     "max_pin_prior_reference": max_pin_prior(prior),
+                     "max_pin_prior_reference": max(freqs.values()),
                      "prior_reference_assumptions": "matched messages, no extra evidence",
                      "environment": environment, "elapsed_seconds": perf_counter() - started},
         "trials": trials,

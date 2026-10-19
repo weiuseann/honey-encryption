@@ -59,7 +59,8 @@ def capture_environment(data_paths: list[Path]) -> dict:
         "data_sha256": {path.relative_to(ROOT).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
                         for path in data_paths},
         "source_sha256": {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest() for name in
-                          ("experiments/success_vs_baseline.py", "experiments/results.py")},
+                          ("experiments/success_vs_baseline.py", "experiments/results.py",
+                           "experiments/cli.py")},
     }
 
 

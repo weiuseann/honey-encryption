@@ -1,12 +1,13 @@
 """Reproducible card-attack trials with rank summaries.
 
-Other setup names are validated for later integration, not silently substituted.
+RSA uses a separate demo result schema, selected explicitly through the CLI.
 Results contain metadata, raw trial records, and statistical summaries.
 Ranks identify the original PIN, not the first equal plaintext.
 """
 
 from random import Random
 from time import perf_counter
+from collections.abc import Callable
 
 from attacks.brute_force import brute_force
 from attacks.format_filter import checks_passed, funnel, rank_by_format
@@ -33,6 +34,8 @@ SETUPS = {
     "wallet-bayes-pin": ("good",), "rsa-verify": ("rsa",),
 }
 PRIORS = ("uniform", "calibrated", "uniform-tail")
+RHOS = (0, 0.25, 0.5, 0.75, 1)
+WALLET_SIZES = (2, 3, 5)
 
 
 def max_pin_prior(prior: str) -> float:
@@ -81,14 +84,13 @@ def validate_setup(setup: str, n_trials: int = 1000, seed: int = 0, *,
 
 def run_trials(setup: str, n_trials: int = 1000, seed: int = 0, *,
                dte: str = "good", prior: str = "uniform",
-               k: int | None = None, rho: float | None = None) -> dict:
+               k: int | None = None, rho: float | None = None,
+               progress: Callable[[int, int], None] | None = None) -> dict:
     """Return raw trials, reproducibility metadata, and rank summaries; no automatic saving."""
     options = validate_setup(setup, n_trials, seed, dte=dte, prior=prior, k=k, rho=rho)
     if setup == "rsa-verify":
-        raise NotImplementedError(f"{setup} is defined but not integrated yet")
+        raise NotImplementedError("RSA uses the separate demo route; select it through the CLI")
     k, rho = options["k"], options["rho"]
-    if setup.startswith("wallet-") and rho != 1:
-        raise NotImplementedError("wallet rho controls and sweeps belong to task 6.5")
 
     started = perf_counter()
     data_paths = [BIN_PATH]
@@ -142,6 +144,8 @@ def run_trials(setup: str, n_trials: int = 1000, seed: int = 0, *,
         if setup in ("baseline-format", "format", "format-pin"):
             record["format_funnel"] = funnel(candidates, good.bins)
         trials.append(record)
+        if progress is not None:
+            progress(trial, n_trials)
 
     return {
         "metadata": {**options, "candidate_space": len(ALL_PINS),
@@ -154,5 +158,45 @@ def run_trials(setup: str, n_trials: int = 1000, seed: int = 0, *,
     }
 
 
+def experiment_matrix(family: str = "full") -> list[dict]:
+    """Explicit card configurations; no RSA and no execution. Sensitivity pairs share seeds."""
+    if family not in ("full", "smoke", "single", "side", "wallet", "correlation", "sensitivity"):
+        raise ValueError("unknown experiment family")
+    baseline = [{"setup": s, "dte": "good", "prior": "uniform"}
+                for s in ("baseline", "baseline-format")]
+    single = [{"setup": s, "dte": d, "prior": "calibrated"}
+              for s in ("format", "pin", "format-pin") for d in ("weak", "good")]
+    side = [{"setup": s, "dte": "good", "prior": "calibrated"} for s in
+            ("side-bank", "side-last4", "side-bank-last4", "side-bank-last4-pin")]
+    wallet = [{"setup": s, "dte": "good", "prior": "calibrated", "k": k, "rho": 1}
+              for s in ("wallet-simple", "wallet-simple-pin", "wallet-bayes-pin")
+              for k in WALLET_SIZES]
+    correlation = [{"setup": "wallet-bayes-pin", "dte": "good", "prior": "calibrated",
+                    "k": k, "rho": rho} for k in WALLET_SIZES for rho in RHOS]
+    # rho=1 Bayes rows already appear in wallet; run each configuration only once.
+    core = baseline + single + side + wallet + [r for r in correlation if r["rho"] != 1]
+    prior_dependent = [r for r in core if r["setup"] in
+                       ("pin", "format-pin", "side-bank-last4-pin",
+                        "wallet-simple-pin", "wallet-bayes-pin")]
+    sensitivity = [dict(r, prior=p) for r in prior_dependent
+                   for p in ("calibrated", "uniform-tail")]
+    families = {"single": single, "side": side, "wallet": wallet,
+                "correlation": correlation, "sensitivity": sensitivity,
+                "full": core + [r for r in sensitivity if r["prior"] == "uniform-tail"],
+                "smoke": baseline + [single[2], single[5], side[-1], wallet[0],
+                                      correlation[0], correlation[2], correlation[4],
+                                      dict(correlation[0], prior="uniform-tail")]}
+    return families[family]
+
+
+def configuration_name(options: dict) -> str:
+    """Readable, unique folder name within a suite (one seed/trial count per row)."""
+    name = f"{options['setup']}-{options['dte']}-{options['prior']}"
+    if options.get("k") is not None:
+        name += f"-k{options['k']}-rho{options['rho']:g}"
+    return name
+
+
 if __name__ == "__main__":
-    raise NotImplementedError("Use run_trials directly; the experiment CLI is a later task")
+    from experiments.cli import main
+    main()

@@ -52,11 +52,11 @@ def test_invalid_options_fail_before_encryption(options, monkeypatch):
 
 
 @pytest.mark.parametrize("setup,dte", [("rsa-verify", "rsa")])
-def test_valid_future_setups_do_not_silently_run_baselines(setup, dte, monkeypatch):
+def test_rsa_does_not_silently_run_card_baselines(setup, dte, monkeypatch):
     def forbidden_dte():
         raise AssertionError("not-integrated setups must not start trials")
     monkeypatch.setattr(harness, "GoodCardDTE", forbidden_dte)
-    with pytest.raises(NotImplementedError, match="not integrated yet"):
+    with pytest.raises(NotImplementedError, match="separate demo route"):
         harness.run_trials(setup, 1, 2026, dte=dte)
 
 
@@ -158,9 +158,9 @@ def test_format_composes_existing_filter_with_invalid_decoys(monkeypatch):
     assert row["format_funnel"] == {"all": 10000, "luhn": 1, "network": 1, "bin": 1}
 
 
-def test_wallet_rho_sweep_is_explicitly_pending():
-    with pytest.raises(NotImplementedError, match="task 6.5"):
-        harness.run_trials("wallet-bayes-pin", 1, 2026, rho=0)
+def test_wallet_uncorrelated_control_runs():
+    result = harness.run_trials("wallet-bayes-pin", 1, 2026, rho=0)
+    assert result["trials"][0]["rho"] == 0
 
 
 @pytest.mark.parametrize("prior", ["calibrated", "uniform-tail"])

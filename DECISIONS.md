@@ -60,7 +60,7 @@ Core claim
 | Attacks: RSA verify | Done: proper-divisor filter plus small and real-size end-to-end evidence |
 | RSA narrated demo (`experiments/demo_rsa.py`) | Done: small demonstration and full 10,000-PIN 1024-bit run verified and recorded |
 | Experiments: card pairs (`generate_wallet`), demo (`demo_card_attacks.py`), Bayes prediction check (`check_bayes_prediction.py`) | Done |
-| **Next (Kee):** final harness `experiments/success_vs_baseline.py` | In progress: baseline/format controls, PIN/combined ranking, side info, rho=1 wallets, Wilson summaries, CSV/JSON save/load and metadata done. Remaining: rho controls/sweep, sensitivity studies, RSA harness integration, CLI/plots/full matrix. |
+| **Next (Kee):** final harness `experiments/success_vs_baseline.py` | In progress: card attack routes, Bayes rho controls/sweep, prior-sensitivity matrix, explicit CLI/suites, separate RSA dispatch, Wilson summaries, CSV/JSON and metadata done. Remaining: plots, integrated evidence review, full matrix execution and results guide. |
 | Experiments: AES mode pitfall | Done: seeded three-mode acceptance comparison, measured counts, CLI, and tests |
 | `data/bin_list.csv` | Done (20 BINs) |
 | `data/pin_frequencies.csv` (+ uniform-tail variant, generator) | Done |
@@ -650,8 +650,53 @@ ranks 1/1/1; k=2 simple-plus-PIN 54/35/52 and Bayes-plus-PIN 86/9/4. These tiny
 runs check mechanics, not precise rates; Bayes need not win every individual
 trial. Detailed traces and artifacts live with the external OpenSpec change.
 
+### 2026-10-19: Bayes correlation sweep and independent-wallet control (Kee, task 6.5)
+**Decision:** support rho in [0,1] for Bayes runs and enumerate 0/.25/.5/.75/1
+for k=2/3/5. Pass the identical numeric rho to victim generation and ranking.
+Simple rules remain rho=1 only. Rho is a mixture-branch probability, not the
+overall chance of matching banks: independent draws can match by coincidence.
+**Why:** at rho=0 the likelihood ratio is one for every wallet, so Bayes must
+equal PIN ranking for identical candidates and tie RNG. At rho=1 mixed wallets
+have score zero. Finite measured curves need not be monotonic.
+**Where:** harness matrix/routes and integration tests; Seann's model unchanged.
+
+### 2026-10-19: Paired prior-sensitivity matrix (Kee, task 6.6)
+**Decision:** enumerate calibrated and uniform-tail pairs for all PIN-scored
+single-card, combined side-info/PIN, simple-wallet/PIN and Bayes-wallet/PIN
+configurations, including every k/rho sweep row. This gives 46 paired rows.
+Use identical options and per-configuration seeds except for the selected prior.
+Victim sampling and scoring share that run's table; record actual input hashes.
+**Why:** published popular-PIN information does not determine the full tail.
+Measured sensitivity is preferable to inferring universal real-world lower
+bounds from partial concentration statistics. BIN data stays fixed; generated
+frequency CSVs are unchanged. Output names include prior, k and rho.
+**Where:** experiment_matrix and suite naming/seeding, tests, README.
+
+### 2026-10-19: Explicit CLI workloads, saved manifests and separate RSA (Kee, task 7.1)
+**Decision:** implement --setup, --family, --suite smoke/full, trial/seed/model
+options, Bayes rho sweep and required new output path. Validate all rows first;
+print decryptions/options/seeds before execution, and trial progress during runs.
+Record a suite.json with planned/complete states and save each completed run.
+Seed = base + first-seen configuration index excluding prior; record exact seeds
+because indices can differ between families. Reproduce with standalone options.
+**Workload:** smoke has 10 rows, full has 56 unique card rows; one trial per full
+row costs 1.47 million card decryptions. Only explicit full defaults to 1000
+trials (1.47 billion decryptions); other selections default to one. Automatic
+resume is not implemented. No full evidence collection is implied by CLI work.
+**RSA:** excluded from all card suites, selected explicitly, reusing run_demo
+and its existing separate JSON schema. Default 16-bit factors; real-size 1024
+must be explicit. Do not force verification outcomes into card rank summaries.
+**Where:** small experiments/cli.py, harness entry point/matrix, metadata source
+hashes, CLI tests and README commands. No new dependency or teammate edits.
+User explicitly requested these three next unfinished subtasks together.
+**Verification:** 419 tests passed in 64.28s; whitespace and strict OpenSpec
+validation passed. Actual CLI smoke/single/rho/paired-prior commands produced
+24 card result folders, all loaded and checked against manifests. One wallet
+rerun with recorded seed/options reproduced ranks and summary. Small explicit
+RSA CLI run retained the true PIN among 10 verified PINs; no real-size rerun.
+Saved one-trial rho ranks were 241/293/1/217/1 for 0/.25/.5/.75/1; these validate
+mechanics and do not establish monotonicity or precise probabilities.
+
 ## Open decisions
 
-- Correlated card-pair model: which `rho` values to sweep (suggested 0, 0.25, 0.5, 0.75, 1; use the
-  Bayes-optimal rule).
 - Presentation date and timeline.

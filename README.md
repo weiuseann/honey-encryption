@@ -233,9 +233,9 @@ gave 45 total. Neither CBC tests nor the demo assume an exact survivor count.
 These rejection checks let an attacker remove decoys before DTE decoding, which
 explains the framework's CTR choice. The shared framework remains unchanged.
 
-## Final harness: baseline and format stage
+## Final experiment harness
 
-The harness currently runs baseline controls and weak/good format experiments:
+The harness runs baseline, format, popularity, side-information and wallet experiments:
 
 ```python
 from experiments.success_vs_baseline import run_trials
@@ -261,8 +261,9 @@ Each control trial records 10,000 survivors at every format stage.
 | `format` | `weak`, `good` | Runnable |
 | `pin`, `format-pin` | `weak`, `good` | Runnable |
 | `side-bank`, `side-last4`, `side-bank-last4`, `side-bank-last4-pin` | `good` | Runnable, accurate side information |
-| `wallet-simple`, `wallet-simple-pin`, `wallet-bayes-pin` | `good` | Runnable, k=2/3/5 and rho=1 |
-| `rsa-verify` | `rsa` | Harness integration pending; standalone RSA demo works |
+| `wallet-simple`, `wallet-simple-pin` | `good` | Runnable, k=2/3/5 and rho=1 |
+| `wallet-bayes-pin` | `good` | Runnable, k=2/3/5 and rho in [0,1] |
+| `rsa-verify` | `rsa` | Explicit CLI selection reuses the separate RSA demo |
 
 Keyword options are `dte` (default `good`), `prior` (default `uniform`), `k`,
 and `rho`. Priors are `uniform`, `calibrated`, or `uniform-tail`; the baseline
@@ -270,8 +271,8 @@ controls and planned RSA route require uniform PINs. Wallet defaults are k=2,
 rho=1, with allowed k=2/3/5. Only Bayes wallet ranking allows rho below one.
 Non-wallet setups reject k/rho. Unknown or incompatible options fail before
 encryption; defined future routes raise `NotImplementedError` rather than
-silently running a different experiment. Rho below one remains pending task 6.5;
-the module CLI and sensitivity-suite orchestration are later tasks.
+silently running a different experiment. RSA has its own result schema: select
+it through the CLI or call `run_demo`, rather than card-only `run_trials`.
 
 For popularity experiments, select `prior="calibrated"` explicitly; the default
 stays uniform. The chosen table is loaded once and used for victim PIN sampling
@@ -294,7 +295,12 @@ Each card has fresh salt/nonce, but the same victim PIN. A candidate is
 popularity; `wallet-bayes-pin` uses popularity times the wallet likelihood
 ratio. For a same-bank k-card wallet at rho=1 that ratio is `q_bank**(1-k)`;
 mixed-bank wallets score zero. Simple ranking passes `rho=None` to the helper;
-the generator and recorded experiment options still use rho=1.
+the generator and recorded experiment options still use rho=1 for simple rules.
+Bayes also supports intermediate rho and rho=0. Here rho is the probability of
+choosing the shared-bank generation branch; independent draws can still share a
+bank by chance. Its general likelihood ratio is `(1-rho)+rho*q_bank**(1-k)`
+for same-bank wallets and `1-rho` otherwise. At rho=0 all ratios are one, so
+ranking is exactly PIN popularity. Finite measured curves need not be monotonic.
 
 ```python
 popular = run_trials("pin", 3, 2026, prior="calibrated")
@@ -306,6 +312,74 @@ wallet = run_trials("wallet-bayes-pin", 3, 2026, prior="calibrated", k=2)
 These are synthetic model experiments: BIN weights are assumed and PIN tails
 are modelled from partial published frequencies. A few smoke trials check the
 pipeline, not real-world success rates or a universal lower bound.
+
+### Command-line runs and suites
+
+Run from the repository root using the Python environment. OpenSpec commands
+still run from the parent directory. Every output path below must be new.
+
+```powershell
+.\.venv\Scripts\python.exe -m experiments.success_vs_baseline --help
+.\.venv\Scripts\python.exe -m experiments.success_vs_baseline --setup baseline --trials 1 --seed 2026 --output results/baseline-example
+.\.venv\Scripts\python.exe -m experiments.success_vs_baseline --setup format-pin --dte weak --prior calibrated --trials 1 --seed 2026 --output results/combined-example
+.\.venv\Scripts\python.exe -m experiments.success_vs_baseline --setup wallet-bayes-pin --prior calibrated --k 2 --rho 0.5 --trials 1 --output results/wallet-example
+.\.venv\Scripts\python.exe -m experiments.success_vs_baseline --setup wallet-bayes-pin --prior calibrated --k 2 --rho-sweep --trials 1 --output results/rho-example
+.\.venv\Scripts\python.exe -m experiments.success_vs_baseline --family sensitivity --trials 1 --seed 2026 --output results/sensitivity-example
+.\.venv\Scripts\python.exe -m experiments.success_vs_baseline --suite smoke --output results/smoke-example
+```
+
+Use `--setup` for one custom configuration; its prior defaults to uniform.
+`--rho-sweep` selects five values 0/.25/.5/.75/1, Bayes only, using all k=2/3/5
+unless `--k` is specified. Named families/suites have fixed model settings and
+reject conflicting per-setup options. Available families are `single`, `side`,
+`wallet`, `correlation`, and `sensitivity`; they default to one trial per row.
+
+| Selection | Configurations | Card decryptions at one trial per row |
+|---|---:|---:|
+| smoke suite | 10 representative rows | 150000 |
+| single family | 6 | 60000 |
+| side family | 4 | 40000 |
+| wallet family | 9 | 300000 |
+| correlation family | 15 | 500000 |
+| sensitivity family | 46 paired prior rows | 1300000 |
+| full suite | 56 unique rows | 1470000 |
+
+The sensitivity family pairs calibrated and uniform-tail priors for every
+ranking that uses PIN probability, including all k/rho Bayes rows; it does not
+rerun format-only or side-only attacks as prior-dependent rankings. The full
+suite combines all agreed card rows and alternate-prior counterparts without
+duplicating Bayes rho=1 configurations. BIN inputs stay fixed. The two priors
+retain the published top-PIN information but model the remaining tail differently;
+compare measured outcomes rather than assuming a universal lower bound.
+
+`--suite full` defaults to **1000 trials per row**, or 1.47 billion card
+decryptions. It is explicit and can be expensive; implementation smoke checks
+do not launch it. Override `--trials` when intentionally checking the matrix
+with fewer trials. Full evidence collection remains a later project task.
+
+All card selections save a `suite.json` plus one result subdirectory per
+configuration. The manifest records normalized options, seed, folder name and
+planned/complete status. Each completed run is saved before the next starts;
+unfinished runs retain planned status. Automatic resume is not implemented.
+The CLI prints the workload and all setup seeds before execution, then trial
+progress at trial 1, every 10 trials and completion.
+
+Seed assignment is `base_seed + first-seen configuration index`, excluding
+the prior from configuration identity. Paired priors therefore share seeds;
+each run still samples and scores using its own table. A seed can differ across
+families because row order differs: use the recorded per-run seed to reproduce
+a result with `--setup`, its exact options, and its original trial count.
+
+RSA is excluded from every card family and suite. Select it explicitly:
+
+```powershell
+.\.venv\Scripts\python.exe -m experiments.success_vs_baseline --setup rsa-verify --bits 16 --seed 2026 --output results/rsa-small-example.json
+```
+
+This calls the existing demo and saves its separate verification measurements,
+not card rank statistics. Real-size enumeration requires explicit `--bits 1024`;
+the already-recorded real-size evidence need not be rerun. RSA supports one
+trial per invocation here; use the standalone demo for benchmark-only options.
 
 The result is a plain dictionary. `metadata` records options, analytical 0.0001
 baseline, maximum-PIN-prior reference with its assumptions, elapsed time, and

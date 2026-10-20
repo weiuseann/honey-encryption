@@ -1,0 +1,249 @@
+{
+  "n_trials": 1000,
+  "rank_one_successes": 379,
+  "rank_one_rate": 0.379,
+  "ci95_low": 0.34944843375830026,
+  "ci95_high": 0.4094776417952041,
+  "median_rank": 3.0,
+  "success_at_rank": {
+    "1": 0.379,
+    "10": 0.636,
+    "100": 1.0,
+    "1000": 1.0,
+    "10000": 1.0
+  },
+  "rank_cdf": [
+    {
+      "rank": 0,
+      "success": 0.0
+    },
+    {
+      "rank": 1,
+      "success": 0.379
+    },
+    {
+      "rank": 2,
+      "success": 0.456
+    },
+    {
+      "rank": 3,
+      "success": 0.529
+    },
+    {
+      "rank": 4,
+      "success": 0.56
+    },
+    {
+      "rank": 5,
+      "success": 0.579
+    },
+    {
+      "rank": 6,
+      "success": 0.594
+    },
+    {
+      "rank": 7,
+      "success": 0.608
+    },
+    {
+      "rank": 8,
+      "success": 0.621
+    },
+    {
+      "rank": 9,
+      "success": 0.627
+    },
+    {
+      "rank": 10,
+      "success": 0.636
+    },
+    {
+      "rank": 11,
+      "success": 0.649
+    },
+    {
+      "rank": 12,
+      "success": 0.661
+    },
+    {
+      "rank": 13,
+      "success": 0.676
+    },
+    {
+      "rank": 14,
+      "success": 0.685
+    },
+    {
+      "rank": 15,
+      "success": 0.695
+    },
+    {
+      "rank": 16,
+      "success": 0.703
+    },
+    {
+      "rank": 17,
+      "success": 0.708
+    },
+    {
+      "rank": 18,
+      "success": 0.715
+    },
+    {
+      "rank": 19,
+      "success": 0.724
+    },
+    {
+      "rank": 20,
+      "success": 0.732
+    },
+    {
+      "rank": 21,
+      "success": 0.74
+    },
+    {
+      "rank": 22,
+      "success": 0.751
+    },
+    {
+      "rank": 23,
+      "success": 0.766
+    },
+    {
+      "rank": 24,
+      "success": 0.771
+    },
+    {
+      "rank": 25,
+      "success": 0.777
+    },
+    {
+      "rank": 26,
+      "success": 0.789
+    },
+    {
+      "rank": 27,
+      "success": 0.805
+    },
+    {
+      "rank": 28,
+      "success": 0.813
+    },
+    {
+      "rank": 29,
+      "success": 0.824
+    },
+    {
+      "rank": 30,
+      "success": 0.839
+    },
+    {
+      "rank": 31,
+      "success": 0.85
+    },
+    {
+      "rank": 32,
+      "success": 0.858
+    },
+    {
+      "rank": 33,
+      "success": 0.868
+    },
+    {
+      "rank": 34,
+      "success": 0.878
+    },
+    {
+      "rank": 35,
+      "success": 0.89
+    },
+    {
+      "rank": 36,
+      "success": 0.906
+    },
+    {
+      "rank": 37,
+      "success": 0.909
+    },
+    {
+      "rank": 38,
+      "success": 0.918
+    },
+    {
+      "rank": 39,
+      "success": 0.933
+    },
+    {
+      "rank": 40,
+      "success": 0.937
+    },
+    {
+      "rank": 41,
+      "success": 0.95
+    },
+    {
+      "rank": 42,
+      "success": 0.954
+    },
+    {
+      "rank": 43,
+      "success": 0.958
+    },
+    {
+      "rank": 44,
+      "success": 0.962
+    },
+    {
+      "rank": 45,
+      "success": 0.971
+    },
+    {
+      "rank": 46,
+      "success": 0.975
+    },
+    {
+      "rank": 47,
+      "success": 0.98
+    },
+    {
+      "rank": 48,
+      "success": 0.987
+    },
+    {
+      "rank": 49,
+      "success": 0.988
+    },
+    {
+      "rank": 50,
+      "success": 0.992
+    },
+    {
+      "rank": 51,
+      "success": 0.993
+    },
+    {
+      "rank": 54,
+      "success": 0.995
+    },
+    {
+      "rank": 55,
+      "success": 0.996
+    },
+    {
+      "rank": 56,
+      "success": 0.997
+    },
+    {
+      "rank": 57,
+      "success": 0.998
+    },
+    {
+      "rank": 58,
+      "success": 1.0
+    },
+    {
+      "rank": 10000,
+      "success": 1.0
+    }
+  ]
+}

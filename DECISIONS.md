@@ -60,7 +60,7 @@ Core claim
 | Attacks: RSA verify | Done: proper-divisor filter plus small and real-size end-to-end evidence |
 | RSA narrated demo (`experiments/demo_rsa.py`) | Done: small demonstration and full 10,000-PIN 1024-bit run verified and recorded |
 | Experiments: card pairs (`generate_wallet`), demo (`demo_card_attacks.py`), Bayes prediction check (`check_bayes_prediction.py`) | Done |
-| **Next (Kee):** final harness `experiments/success_vs_baseline.py` | In progress: all attack routes/suites, saved-result charts and 56-configuration three-trial integration review done. Remaining: full statistical matrix execution (8.2) and final results guide/review (8.3). |
+| Final harness, evidence and results guide (Kee) | Done: all routes/suites/plots, 56 configurations x 1000 trials, versioned raw evidence, five selected figures and CONCLUSION.md. Final user review and shared presentation preparation remain. |
 | Experiments: AES mode pitfall | Done: seeded three-mode acceptance comparison, measured counts, CLI, and tests |
 | `data/bin_list.csv` | Done (20 BINs) |
 | `data/pin_frequencies.csv` (+ uniform-tail variant, generator) | Done |
@@ -740,6 +740,43 @@ these are mechanics checks, not precise real-world success estimates.
 manifest/results, replay-check.json, CLI/test logs and figures/charts.json.
 User requested tasks 7.2, 7.3 and 8.1 together. Prior work committed/pushed as
 e69c1c0; this batch remains uncommitted for review. No teammate-owned changes.
+
+### 2026-10-20: Completed full card matrix and checked observed variation (Kee, task 8.2)
+**Evidence:** all 56 configurations completed with 1000 trials each: 56000
+victims and 1.47 billion card decryptions, sum of run times 38594.880 seconds.
+Every raw file loaded with summary checks; source/data hashes matched audited
+code and inputs. Revisions e69c1c0/e615caa span a plotting/documentation commit;
+the recorded execution-source hashes are unchanged. Original metadata retained.
+**Findings:** weak-format first-guess success 99.0%; good-format 0/1000 observed;
+good PIN-only 11.8%; accurate bank/last4/PIN 95.0%. Calibrated Bayes rho=1 rates
+are 18.1%/27.3%/61.0% for k=2/3/5. Alternative-tail five-card Bayes is 56.8%.
+**Interpretation:** the baseline's 1/1000 observed success does not replace the
+0.01% analytical baseline. PIN-only and zero-rho outcomes equal sampled top-PIN
+counts in 12 audited rows; weak/good and prior variants have independent sample
+variation. Two-card simple-plus-PIN 18.7% versus Bayes 18.1% is not evidence of
+Bayes inferiority: intervals overlap and the runs use different victims/seeds.
+No output was adjusted to force expected ordering. All diagnostic charts were
+regenerated from the full saved study; no additional RSA/AES run was required.
+
+### 2026-10-20: Version final evidence and publish a focused conclusion (Kee, task 8.3)
+**Decision:** user explicitly requested CONCLUSION.md, repository evidence,
+commit and push. Copy the 5.5 MB raw card results plus validated real-size RSA
+and AES records into results/final-2026-10-20/. Preserve originals outside the
+repo; OpenSpec/AGENTS remain outside. Use results/** -text in .gitattributes so
+Git line-ending conversion cannot change recorded evidence hashes.
+**Reporting:** CONCLUSION.md connects assumptions, algorithms and measured
+outcomes, including intervals, sensitivity, a small public-divisor example,
+RSA bias and likely questions. Select five presentation figures with --kind
+presentation; retain --kind all for diagnostics. Version raw ranks, manifest,
+metadata, compact summary and verification inventory, not earlier draft charts.
+The figure captions describe model scope rather than calling final n=1000
+results smoke tests. Results are synthetic, not real card data or production keys.
+**Validation:** full suite 425 passed in 93.80s after adding presentation
+selection; raw evidence audited, main figures visually inspected, Markdown
+links and quantitative claims checked against saved summaries. Final caption
+layout changes also receive focused plotting checks before commit.
+No teammate-owned implementation changed. User review precedes archiving;
+slide/demo preparation remains shared and is not created by this change.
 
 ## Open decisions
 

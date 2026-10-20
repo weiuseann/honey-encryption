@@ -1,0 +1,15 @@
+{
+  "seed": 2026,
+  "guesses_per_mode": 10000,
+  "accepted": {
+    "CTR": 10000,
+    "GCM": 1,
+    "CBC": 45
+  },
+  "python": "3.11.4",
+  "cryptography": "50.0.2",
+  "source_sha256": {
+    "experiments/aes_mode_pitfall.py": "3ceadaa461408fb5306927e9ea863d95d1b71ffcceb946c5d1152e85eb0cdad0",
+    "framework/he.py": "49de3b8173db3c496f223ac582d7bd0625964978897838b9e77e05950282d3b1"
+  }
+}

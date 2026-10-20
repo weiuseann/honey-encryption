@@ -94,6 +94,13 @@ def test_synthetic_full_matrix_covers_wallet_and_prior_figures(tmp_path):
     assert len(prior) == 3  # 23 matched configurations, eight per page.
     assert list(prior["prior-comparison-1"].axes[0].lines[0].get_xdata()) == [25] * 8
     assert {t.get_text() for t in prior["prior-comparison-1"].axes[0].get_legend().texts} == {"calibrated", "uniform-tail"}
+    aes, rsa = evidence_paths(tmp_path)
+    presentation = plots.presentation_figures(rows, aes, rsa)
+    assert set(presentation) == {"card-attacks", "guess-budgets", "wallet-correlation",
+                                  "aes-acceptance", "rsa-verification"}
+    assert list(presentation["card-attacks"].axes[0].lines[0].get_xdata()) == [25] * 6
+    with pytest.raises(ValueError, match="both --aes and --rsa"):
+        plots.presentation_figures(rows, None, None)
 
 
 def test_evidence_panels_have_distinct_counts_and_units(tmp_path):

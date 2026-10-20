@@ -1,0 +1,2 @@
+# Preserve evidence bytes: recorded SHA-256 values must survive checkout.
+results/** -text

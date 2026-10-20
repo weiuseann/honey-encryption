@@ -15,7 +15,7 @@ from experiments.results import load_results
 
 
 ASSUMPTIONS = ("Synthetic cards; assumed BIN shares; modelled PIN tails; accurate side information.\n"
-               "Points are measured rates; bars are 95% Wilson intervals. Small n checks mechanics only.")
+               "Points are measured rates; bars are 95% Wilson intervals. Interpret results within this model.")
 
 
 def load_card_runs(paths: list[Path]) -> list[dict]:
@@ -237,9 +237,30 @@ def evidence_figures(aes_path: Path | None, rsa_path: Path | None) -> dict:
     return figures
 
 
+def presentation_figures(runs: list[dict], aes: Path | None, rsa: Path | None) -> dict:
+    """Five summary figures; detailed diagnostics remain available with --kind all."""
+    lookup = {(r["metadata"]["setup"], r["metadata"]["dte"], r["metadata"]["prior"]): r
+              for r in runs if r["metadata"]["k"] is None}
+    try:
+        single = [lookup[s, d, "calibrated"] for s, d in
+                  (("format", "weak"), ("format", "good"), ("pin", "good"),
+                   ("side-last4", "good"), ("side-bank-last4", "good"),
+                   ("side-bank-last4-pin", "good"))]
+        budgets = [lookup["baseline", "good", "uniform"], single[2], single[3], single[5]]
+    except KeyError as error:
+        raise ValueError(f"presentation requires the full card matrix; missing {error}") from error
+    if aes is None or rsa is None:
+        raise ValueError("presentation requires both --aes and --rsa saved evidence")
+    wallets = wallet_figures(runs)
+    return {"card-attacks": rate_figure(single, "Valid decoys versus PIN popularity and accurate side information"),
+            "guess-budgets": cdf_figure(budgets, "Uniform baseline versus calibrated-PIN attack scenarios"),
+            "wallet-correlation": wallets["wallet-rho-calibrated"],
+            **evidence_figures(aes, rsa)}
+
+
 def plot_saved(paths: list[Path], output: Path, *, kind: str = "cards",
                aes: Path | None = None, rsa: Path | None = None) -> list[str]:
-    if kind not in ("cards", "wallet", "prior", "evidence", "all"):
+    if kind not in ("cards", "wallet", "prior", "evidence", "all", "presentation"):
         raise ValueError("unknown chart kind")
     if output.exists():
         raise ValueError(f"output already exists: {output}")
@@ -248,6 +269,8 @@ def plot_saved(paths: list[Path], output: Path, *, kind: str = "cards",
     try:
         if kind != "evidence" and not runs:
             raise ValueError("card charts require saved result or suite directories")
+        if kind == "presentation":
+            figures.update(presentation_figures(runs, aes, rsa))
         if kind in ("cards", "all"):
             figures.update(card_figures(runs))
         if kind in ("wallet", "all"):
@@ -277,7 +300,7 @@ def main(argv: list[str] | None = None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("inputs", nargs="*", type=Path, help="saved card run/suite directories")
     parser.add_argument("--output", type=Path, required=True, help="new chart directory")
-    parser.add_argument("--kind", choices=("cards", "wallet", "prior", "evidence", "all"), default="cards")
+    parser.add_argument("--kind", choices=("cards", "wallet", "prior", "evidence", "all", "presentation"), default="cards")
     parser.add_argument("--aes", type=Path, help="saved AES comparison JSON")
     parser.add_argument("--rsa", type=Path, help="saved RSA demo JSON")
     args = parser.parse_args(argv)

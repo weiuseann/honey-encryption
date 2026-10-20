@@ -1,0 +1,736 @@
+{
+  "base_seed": 2026,
+  "seed_rule": "base + first-seen configuration index, excluding prior",
+  "n_trials": 1000,
+  "card_decryptions": 1470000000,
+  "runs": [
+    {
+      "directory": "baseline-good-uniform",
+      "options": {
+        "setup": "baseline",
+        "n_trials": 1000,
+        "seed": 2026,
+        "dte": "good",
+        "prior": "uniform",
+        "k": null,
+        "rho": null
+      },
+      "status": "complete"
+    },
+    {
+      "directory": "baseline-format-good-uniform",
+      "options": {
+        "setup": "baseline-format",
+        "n_trials": 1000,
+        "seed": 2027,
+        "dte": "good",
+        "prior": "uniform",
+        "k": null,
+        "rho": null
+      },
+      "status": "complete"
+    },
+    {
+      "directory": "format-weak-calibrated",
+      "options": {
+        "setup": "format",
+        "n_trials": 1000,
+        "seed": 2028,
+        "dte": "weak",
+        "prior": "calibrated",
+        "k": null,
+        "rho": null
+      },
+      "status": "complete"
+    },
+    {
+      "directory": "format-good-calibrated",
+      "options": {
+        "setup": "format",
+        "n_trials": 1000,
+        "seed": 2029,
+        "dte": "good",
+        "prior": "calibrated",
+        "k": null,
+        "rho": null
+      },
+      "status": "complete"
+    },
+    {
+      "directory": "pin-weak-calibrated",
+      "options": {
+        "setup": "pin",
+        "n_trials": 1000,
+        "seed": 2030,
+        "dte": "weak",
+        "prior": "calibrated",
+        "k": null,
+        "rho": null
+      },
+      "status": "complete"
+    },
+    {
+      "directory": "pin-good-calibrated",
+      "options": {
+        "setup": "pin",
+        "n_trials": 1000,
+        "seed": 2031,
+        "dte": "good",
+        "prior": "calibrated",
+        "k": null,
+        "rho": null
+      },
+      "status": "complete"
+    },
+    {
+      "directory": "format-pin-weak-calibrated",
+      "options": {
+        "setup": "format-pin",
+        "n_trials": 1000,
+        "seed": 2032,
+        "dte": "weak",
+        "prior": "calibrated",
+        "k": null,
+        "rho": null
+      },
+      "status": "complete"
+    },
+    {
+      "directory": "format-pin-good-calibrated",
+      "options": {
+        "setup": "format-pin",
+        "n_trials": 1000,
+        "seed": 2033,
+        "dte": "good",
+        "prior": "calibrated",
+        "k": null,
+        "rho": null
+      },
+      "status": "complete"
+    },
+    {
+      "directory": "side-bank-good-calibrated",
+      "options": {
+        "setup": "side-bank",
+        "n_trials": 1000,
+        "seed": 2034,
+        "dte": "good",
+        "prior": "calibrated",
+        "k": null,
+        "rho": null
+      },
+      "status": "complete"
+    },
+    {
+      "directory": "side-last4-good-calibrated",
+      "options": {
+        "setup": "side-last4",
+        "n_trials": 1000,
+        "seed": 2035,
+        "dte": "good",
+        "prior": "calibrated",
+        "k": null,
+        "rho": null
+      },
+      "status": "complete"
+    },
+    {
+      "directory": "side-bank-last4-good-calibrated",
+      "options": {
+        "setup": "side-bank-last4",
+        "n_trials": 1000,
+        "seed": 2036,
+        "dte": "good",
+        "prior": "calibrated",
+        "k": null,
+        "rho": null
+      },
+      "status": "complete"
+    },
+    {
+      "directory": "side-bank-last4-pin-good-calibrated",
+      "options": {
+        "setup": "side-bank-last4-pin",
+        "n_trials": 1000,
+        "seed": 2037,
+        "dte": "good",
+        "prior": "calibrated",
+        "k": null,
+        "rho": null
+      },
+      "status": "complete"
+    },
+    {
+      "directory": "wallet-simple-good-calibrated-k2-rho1",
+      "options": {
+        "setup": "wallet-simple",
+        "n_trials": 1000,
+        "seed": 2038,
+        "dte": "good",
+        "prior": "calibrated",
+        "k": 2,
+        "rho": 1
+      },
+      "status": "complete"
+    },
+    {
+      "directory": "wallet-simple-good-calibrated-k3-rho1",
+      "options": {
+        "setup": "wallet-simple",
+        "n_trials": 1000,
+        "seed": 2039,
+        "dte": "good",
+        "prior": "calibrated",
+        "k": 3,
+        "rho": 1
+      },
+      "status": "complete"
+    },
+    {
+      "directory": "wallet-simple-good-calibrated-k5-rho1",
+      "options": {
+        "setup": "wallet-simple",
+        "n_trials": 1000,
+        "seed": 2040,
+        "dte": "good",
+        "prior": "calibrated",
+        "k": 5,
+        "rho": 1
+      },
+      "status": "complete"
+    },
+    {
+      "directory": "wallet-simple-pin-good-calibrated-k2-rho1",
+      "options": {
+        "setup": "wallet-simple-pin",
+        "n_trials": 1000,
+        "seed": 2041,
+        "dte": "good",
+        "prior": "calibrated",
+        "k": 2,
+        "rho": 1
+      },
+      "status": "complete"
+    },
+    {
+      "directory": "wallet-simple-pin-good-calibrated-k3-rho1",
+      "options": {
+        "setup": "wallet-simple-pin",
+        "n_trials": 1000,
+        "seed": 2042,
+        "dte": "good",
+        "prior": "calibrated",
+        "k": 3,
+        "rho": 1
+      },
+      "status": "complete"
+    },
+    {
+      "directory": "wallet-simple-pin-good-calibrated-k5-rho1",
+      "options": {
+        "setup": "wallet-simple-pin",
+        "n_trials": 1000,
+        "seed": 2043,
+        "dte": "good",
+        "prior": "calibrated",
+        "k": 5,
+        "rho": 1
+      },
+      "status": "complete"
+    },
+    {
+      "directory": "wallet-bayes-pin-good-calibrated-k2-rho1",
+      "options": {
+        "setup": "wallet-bayes-pin",
+        "n_trials": 1000,
+        "seed": 2044,
+        "dte": "good",
+        "prior": "calibrated",
+        "k": 2,
+        "rho": 1
+      },
+      "status": "complete"
+    },
+    {
+      "directory": "wallet-bayes-pin-good-calibrated-k3-rho1",
+      "options": {
+        "setup": "wallet-bayes-pin",
+        "n_trials": 1000,
+        "seed": 2045,
+        "dte": "good",
+        "prior": "calibrated",
+        "k": 3,
+        "rho": 1
+      },
+      "status": "complete"
+    },
+    {
+      "directory": "wallet-bayes-pin-good-calibrated-k5-rho1",
+      "options": {
+        "setup": "wallet-bayes-pin",
+        "n_trials": 1000,
+        "seed": 2046,
+        "dte": "good",
+        "prior": "calibrated",
+        "k": 5,
+        "rho": 1
+      },
+      "status": "complete"
+    },
+    {
+      "directory": "wallet-bayes-pin-good-calibrated-k2-rho0",
+      "options": {
+        "setup": "wallet-bayes-pin",
+        "n_trials": 1000,
+        "seed": 2047,
+        "dte": "good",
+        "prior": "calibrated",
+        "k": 2,
+        "rho": 0
+      },
+      "status": "complete"
+    },
+    {
+      "directory": "wallet-bayes-pin-good-calibrated-k2-rho0.25",
+      "options": {
+        "setup": "wallet-bayes-pin",
+        "n_trials": 1000,
+        "seed": 2048,
+        "dte": "good",
+        "prior": "calibrated",
+        "k": 2,
+        "rho": 0.25
+      },
+      "status": "complete"
+    },
+    {
+      "directory": "wallet-bayes-pin-good-calibrated-k2-rho0.5",
+      "options": {
+        "setup": "wallet-bayes-pin",
+        "n_trials": 1000,
+        "seed": 2049,
+        "dte": "good",
+        "prior": "calibrated",
+        "k": 2,
+        "rho": 0.5
+      },
+      "status": "complete"
+    },
+    {
+      "directory": "wallet-bayes-pin-good-calibrated-k2-rho0.75",
+      "options": {
+        "setup": "wallet-bayes-pin",
+        "n_trials": 1000,
+        "seed": 2050,
+        "dte": "good",
+        "prior": "calibrated",
+        "k": 2,
+        "rho": 0.75
+      },
+      "status": "complete"
+    },
+    {
+      "directory": "wallet-bayes-pin-good-calibrated-k3-rho0",
+      "options": {
+        "setup": "wallet-bayes-pin",
+        "n_trials": 1000,
+        "seed": 2051,
+        "dte": "good",
+        "prior": "calibrated",
+        "k": 3,
+        "rho": 0
+      },
+      "status": "complete"
+    },
+    {
+      "directory": "wallet-bayes-pin-good-calibrated-k3-rho0.25",
+      "options": {
+        "setup": "wallet-bayes-pin",
+        "n_trials": 1000,
+        "seed": 2052,
+        "dte": "good",
+        "prior": "calibrated",
+        "k": 3,
+        "rho": 0.25
+      },
+      "status": "complete"
+    },
+    {
+      "directory": "wallet-bayes-pin-good-calibrated-k3-rho0.5",
+      "options": {
+        "setup": "wallet-bayes-pin",
+        "n_trials": 1000,
+        "seed": 2053,
+        "dte": "good",
+        "prior": "calibrated",
+        "k": 3,
+        "rho": 0.5
+      },
+      "status": "complete"
+    },
+    {
+      "directory": "wallet-bayes-pin-good-calibrated-k3-rho0.75",
+      "options": {
+        "setup": "wallet-bayes-pin",
+        "n_trials": 1000,
+        "seed": 2054,
+        "dte": "good",
+        "prior": "calibrated",
+        "k": 3,
+        "rho": 0.75
+      },
+      "status": "complete"
+    },
+    {
+      "directory": "wallet-bayes-pin-good-calibrated-k5-rho0",
+      "options": {
+        "setup": "wallet-bayes-pin",
+        "n_trials": 1000,
+        "seed": 2055,
+        "dte": "good",
+        "prior": "calibrated",
+        "k": 5,
+        "rho": 0
+      },
+      "status": "complete"
+    },
+    {
+      "directory": "wallet-bayes-pin-good-calibrated-k5-rho0.25",
+      "options": {
+        "setup": "wallet-bayes-pin",
+        "n_trials": 1000,
+        "seed": 2056,
+        "dte": "good",
+        "prior": "calibrated",
+        "k": 5,
+        "rho": 0.25
+      },
+      "status": "complete"
+    },
+    {
+      "directory": "wallet-bayes-pin-good-calibrated-k5-rho0.5",
+      "options": {
+        "setup": "wallet-bayes-pin",
+        "n_trials": 1000,
+        "seed": 2057,
+        "dte": "good",
+        "prior": "calibrated",
+        "k": 5,
+        "rho": 0.5
+      },
+      "status": "complete"
+    },
+    {
+      "directory": "wallet-bayes-pin-good-calibrated-k5-rho0.75",
+      "options": {
+        "setup": "wallet-bayes-pin",
+        "n_trials": 1000,
+        "seed": 2058,
+        "dte": "good",
+        "prior": "calibrated",
+        "k": 5,
+        "rho": 0.75
+      },
+      "status": "complete"
+    },
+    {
+      "directory": "pin-weak-uniform-tail",
+      "options": {
+        "setup": "pin",
+        "n_trials": 1000,
+        "seed": 2030,
+        "dte": "weak",
+        "prior": "uniform-tail",
+        "k": null,
+        "rho": null
+      },
+      "status": "complete"
+    },
+    {
+      "directory": "pin-good-uniform-tail",
+      "options": {
+        "setup": "pin",
+        "n_trials": 1000,
+        "seed": 2031,
+        "dte": "good",
+        "prior": "uniform-tail",
+        "k": null,
+        "rho": null
+      },
+      "status": "complete"
+    },
+    {
+      "directory": "format-pin-weak-uniform-tail",
+      "options": {
+        "setup": "format-pin",
+        "n_trials": 1000,
+        "seed": 2032,
+        "dte": "weak",
+        "prior": "uniform-tail",
+        "k": null,
+        "rho": null
+      },
+      "status": "complete"
+    },
+    {
+      "directory": "format-pin-good-uniform-tail",
+      "options": {
+        "setup": "format-pin",
+        "n_trials": 1000,
+        "seed": 2033,
+        "dte": "good",
+        "prior": "uniform-tail",
+        "k": null,
+        "rho": null
+      },
+      "status": "complete"
+    },
+    {
+      "directory": "side-bank-last4-pin-good-uniform-tail",
+      "options": {
+        "setup": "side-bank-last4-pin",
+        "n_trials": 1000,
+        "seed": 2037,
+        "dte": "good",
+        "prior": "uniform-tail",
+        "k": null,
+        "rho": null
+      },
+      "status": "complete"
+    },
+    {
+      "directory": "wallet-simple-pin-good-uniform-tail-k2-rho1",
+      "options": {
+        "setup": "wallet-simple-pin",
+        "n_trials": 1000,
+        "seed": 2041,
+        "dte": "good",
+        "prior": "uniform-tail",
+        "k": 2,
+        "rho": 1
+      },
+      "status": "complete"
+    },
+    {
+      "directory": "wallet-simple-pin-good-uniform-tail-k3-rho1",
+      "options": {
+        "setup": "wallet-simple-pin",
+        "n_trials": 1000,
+        "seed": 2042,
+        "dte": "good",
+        "prior": "uniform-tail",
+        "k": 3,
+        "rho": 1
+      },
+      "status": "complete"
+    },
+    {
+      "directory": "wallet-simple-pin-good-uniform-tail-k5-rho1",
+      "options": {
+        "setup": "wallet-simple-pin",
+        "n_trials": 1000,
+        "seed": 2043,
+        "dte": "good",
+        "prior": "uniform-tail",
+        "k": 5,
+        "rho": 1
+      },
+      "status": "complete"
+    },
+    {
+      "directory": "wallet-bayes-pin-good-uniform-tail-k2-rho1",
+      "options": {
+        "setup": "wallet-bayes-pin",
+        "n_trials": 1000,
+        "seed": 2044,
+        "dte": "good",
+        "prior": "uniform-tail",
+        "k": 2,
+        "rho": 1
+      },
+      "status": "complete"
+    },
+    {
+      "directory": "wallet-bayes-pin-good-uniform-tail-k3-rho1",
+      "options": {
+        "setup": "wallet-bayes-pin",
+        "n_trials": 1000,
+        "seed": 2045,
+        "dte": "good",
+        "prior": "uniform-tail",
+        "k": 3,
+        "rho": 1
+      },
+      "status": "complete"
+    },
+    {
+      "directory": "wallet-bayes-pin-good-uniform-tail-k5-rho1",
+      "options": {
+        "setup": "wallet-bayes-pin",
+        "n_trials": 1000,
+        "seed": 2046,
+        "dte": "good",
+        "prior": "uniform-tail",
+        "k": 5,
+        "rho": 1
+      },
+      "status": "complete"
+    },
+    {
+      "directory": "wallet-bayes-pin-good-uniform-tail-k2-rho0",
+      "options": {
+        "setup": "wallet-bayes-pin",
+        "n_trials": 1000,
+        "seed": 2047,
+        "dte": "good",
+        "prior": "uniform-tail",
+        "k": 2,
+        "rho": 0
+      },
+      "status": "complete"
+    },
+    {
+      "directory": "wallet-bayes-pin-good-uniform-tail-k2-rho0.25",
+      "options": {
+        "setup": "wallet-bayes-pin",
+        "n_trials": 1000,
+        "seed": 2048,
+        "dte": "good",
+        "prior": "uniform-tail",
+        "k": 2,
+        "rho": 0.25
+      },
+      "status": "complete"
+    },
+    {
+      "directory": "wallet-bayes-pin-good-uniform-tail-k2-rho0.5",
+      "options": {
+        "setup": "wallet-bayes-pin",
+        "n_trials": 1000,
+        "seed": 2049,
+        "dte": "good",
+        "prior": "uniform-tail",
+        "k": 2,
+        "rho": 0.5
+      },
+      "status": "complete"
+    },
+    {
+      "directory": "wallet-bayes-pin-good-uniform-tail-k2-rho0.75",
+      "options": {
+        "setup": "wallet-bayes-pin",
+        "n_trials": 1000,
+        "seed": 2050,
+        "dte": "good",
+        "prior": "uniform-tail",
+        "k": 2,
+        "rho": 0.75
+      },
+      "status": "complete"
+    },
+    {
+      "directory": "wallet-bayes-pin-good-uniform-tail-k3-rho0",
+      "options": {
+        "setup": "wallet-bayes-pin",
+        "n_trials": 1000,
+        "seed": 2051,
+        "dte": "good",
+        "prior": "uniform-tail",
+        "k": 3,
+        "rho": 0
+      },
+      "status": "complete"
+    },
+    {
+      "directory": "wallet-bayes-pin-good-uniform-tail-k3-rho0.25",
+      "options": {
+        "setup": "wallet-bayes-pin",
+        "n_trials": 1000,
+        "seed": 2052,
+        "dte": "good",
+        "prior": "uniform-tail",
+        "k": 3,
+        "rho": 0.25
+      },
+      "status": "complete"
+    },
+    {
+      "directory": "wallet-bayes-pin-good-uniform-tail-k3-rho0.5",
+      "options": {
+        "setup": "wallet-bayes-pin",
+        "n_trials": 1000,
+        "seed": 2053,
+        "dte": "good",
+        "prior": "uniform-tail",
+        "k": 3,
+        "rho": 0.5
+      },
+      "status": "complete"
+    },
+    {
+      "directory": "wallet-bayes-pin-good-uniform-tail-k3-rho0.75",
+      "options": {
+        "setup": "wallet-bayes-pin",
+        "n_trials": 1000,
+        "seed": 2054,
+        "dte": "good",
+        "prior": "uniform-tail",
+        "k": 3,
+        "rho": 0.75
+      },
+      "status": "complete"
+    },
+    {
+      "directory": "wallet-bayes-pin-good-uniform-tail-k5-rho0",
+      "options": {
+        "setup": "wallet-bayes-pin",
+        "n_trials": 1000,
+        "seed": 2055,
+        "dte": "good",
+        "prior": "uniform-tail",
+        "k": 5,
+        "rho": 0
+      },
+      "status": "complete"
+    },
+    {
+      "directory": "wallet-bayes-pin-good-uniform-tail-k5-rho0.25",
+      "options": {
+        "setup": "wallet-bayes-pin",
+        "n_trials": 1000,
+        "seed": 2056,
+        "dte": "good",
+        "prior": "uniform-tail",
+        "k": 5,
+        "rho": 0.25
+      },
+      "status": "complete"
+    },
+    {
+      "directory": "wallet-bayes-pin-good-uniform-tail-k5-rho0.5",
+      "options": {
+        "setup": "wallet-bayes-pin",
+        "n_trials": 1000,
+        "seed": 2057,
+        "dte": "good",
+        "prior": "uniform-tail",
+        "k": 5,
+        "rho": 0.5
+      },
+      "status": "complete"
+    },
+    {
+      "directory": "wallet-bayes-pin-good-uniform-tail-k5-rho0.75",
+      "options": {
+        "setup": "wallet-bayes-pin",
+        "n_trials": 1000,
+        "seed": 2058,
+        "dte": "good",
+        "prior": "uniform-tail",
+        "k": 5,
+        "rho": 0.75
+      },
+      "status": "complete"
+    }
+  ]
+}

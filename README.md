@@ -4,6 +4,12 @@ We build honey encryption (HE), then measure how far an attacker's success rises
 1/10,000 baseline. That baseline only holds with uniform PINs, a correctly matched DTE and no side
 information. We never attack AES. Every attack targets the 4-digit PIN space and the DTE.
 
+**Final results:** read [CONCLUSION.md](CONCLUSION.md) for the findings and five
+selected figures, or [the evidence README](results/final-2026-10-20/README.md)
+for all 56,000 raw trial records, settings, summaries and reproduction commands.
+The completed study uses 1,000 trials per configuration; it supersedes the
+three-trial smoke charts described later in this README.
+
 ## Setup
 
 ```bash
@@ -49,15 +55,18 @@ A wrong PIN decrypts to a random seed, and the DTE turns that seed into a decoy.
 | `attacks/two_card.py` | done | k cards under one PIN (simple and Bayes-optimal ranking) |
 | `attacks/rsa_verify.py` | done | proper-divisor verification; preserves all matching PIN-factor pairs |
 | `experiments/card_pairs.py` | done | correlated real-card wallet generator (`rho`) |
-| `experiments/success_vs_baseline.py` | in progress | baseline/format trials, summaries; remaining attacks/CLI pending |
-| `experiments/results.py` | done for current runs | rank summaries, reproducibility metadata, CSV/JSON save/load |
+| `experiments/success_vs_baseline.py` | done | card attack routes and complete configuration matrices |
+| `experiments/cli.py` | done | explicit experiment selections, suites, progress and separate RSA dispatch |
+| `experiments/plot_results.py` | done | saved-only diagnostic plots and five-figure presentation selection |
+| `experiments/results.py` | done | rank summaries, reproducibility metadata, CSV/JSON save/load |
 | `experiments/aes_mode_pitfall.py` | done | seeded CTR/GCM/CBC acceptance comparison and CLI |
 | `experiments/demo_card_attacks.py` | done | real card's rank under every card attack (`--trials N`) |
 | `experiments/check_bayes_prediction.py` | done | two-card attack: predicted vs measured rank-1 success (`--k`, `--trials`) |
 | `data/` | done | `bin_list.csv`, `pin_frequencies.csv` (+ generator script); see `data/README.md` |
-| `tests/` | done for the finished parts | pytest |
+| `results/final-2026-10-20/` | recorded | final raw card trials, RSA/AES evidence and five selected charts |
+| `tests/` | done | pytest |
 
-Each stub's docstring describes what goes there and the agreed requirements for it.
+See `DECISIONS.md` for scope, ownership and the implementation decision log.
 
 ## The DTE interface
 
@@ -189,8 +198,8 @@ measurements. The original dependencies remain sufficient for correctness.
 The 2048-bit modulus had exactly one matching candidate PIN, `2381`, the true
 PIN, and one distinct verified factor. This is one reproducible experiment,
 not a guarantee that every trial identifies a unique PIN. The full record is
-kept outside the repo at
-`../openspec/changes/kee-rsa-and-experiments/rsa-1024-full-seed-2026.json`.
+versioned at `results/final-2026-10-20/evidence/rsa-1024.json`; the original
+record is also retained in the external OpenSpec workspace.
 
 `--output` saves all verified matches, generated demonstration inputs, seed,
 timings, software versions, active SymPy backend, Git state, and source checksums.
@@ -355,7 +364,8 @@ compare measured outcomes rather than assuming a universal lower bound.
 `--suite full` defaults to **1000 trials per row**, or 1.47 billion card
 decryptions. It is explicit and can be expensive; implementation smoke checks
 do not launch it. Override `--trials` when intentionally checking the matrix
-with fewer trials. Full evidence collection remains a later project task.
+with fewer trials. The completed full study is versioned under
+`results/final-2026-10-20/`; do not rerun it merely to regenerate charts.
 
 All card selections save a `suite.json` plus one result subdirectory per
 configuration. The manifest records normalized options, seed, folder name and
@@ -448,7 +458,7 @@ points does not assert monotonicity or statistical significance.
 AES and RSA use separate count charts, reading their original saved JSON:
 
 ```powershell
-.\.venv\Scripts\python.exe -m experiments.plot_results --kind evidence --aes ..\openspec\changes\kee-rsa-and-experiments\aes-mode-comparison-seed-2026.json --rsa ..\openspec\changes\kee-rsa-and-experiments\rsa-1024-full-seed-2026.json --output results/evidence-charts
+.\.venv\Scripts\python.exe -m experiments.plot_results --kind evidence --aes results/final-2026-10-20/evidence/aes.json --rsa results/final-2026-10-20/evidence/rsa-1024.json --output results/evidence-charts
 ```
 
 Use `--kind all` with a complete card suite and `--aes`/`--rsa` to export all
@@ -457,6 +467,16 @@ is a separate count; neither is a card rank-one success percentage. Log count
 axes keep the small counts visible and every bar is annotated with its value.
 `charts.json` records chart names, plot-source SHA-256, original file hashes,
 saved metadata/summaries and evidence-file hashes, so figures trace to inputs.
+
+For the five selected presentation figures, use the recorded full results:
+
+```powershell
+.\.venv\Scripts\python.exe -m experiments.plot_results results/final-2026-10-20/cards --kind presentation --aes results/final-2026-10-20/evidence/aes.json --rsa results/final-2026-10-20/evidence/rsa-1024.json --output results/my-presentation-charts
+```
+
+This selects the main card attack comparison, guess budgets, calibrated wallet
+correlation, AES acceptance and RSA verification. Use `--kind all` for the
+larger diagnostic set. [CONCLUSION.md](CONCLUSION.md) explains what each supports.
 
 ### Integrated three-trial smoke evidence
 
@@ -475,8 +495,9 @@ execution during plotting. Exported baseline, wallet, sensitivity, AES and RSA
 charts were opened for visual inspection; CDF legends sit outside the axes and
 RSA labels use separate lines to prevent collisions. All 425 tests passed.
 With n=3 the rates jump by 33.3 percentage points and intervals are very wide;
-this checks mechanics and coverage, not precise probabilities. The 1000-trial
-matrix remains the next evidence-collection task.
+this checks mechanics and coverage, not precise probabilities. The completed
+1000-trial matrix and its selected final figures are now versioned under
+`results/final-2026-10-20/` and explained in [CONCLUSION.md](CONCLUSION.md).
 
 In the three-trial seed-2026 smoke run, weak-DTE format ranks were 1/1/1;
 the good-DTE ranks stayed 4915/6030/3450. Both generate real cards from the same

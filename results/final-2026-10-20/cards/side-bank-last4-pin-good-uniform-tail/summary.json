@@ -1,0 +1,41 @@
+{
+  "n_trials": 1000,
+  "rank_one_successes": 927,
+  "rank_one_rate": 0.927,
+  "ci95_low": 0.9091909744657493,
+  "ci95_high": 0.9415409737875865,
+  "median_rank": 1.0,
+  "success_at_rank": {
+    "1": 0.927,
+    "10": 1.0,
+    "100": 1.0,
+    "1000": 1.0,
+    "10000": 1.0
+  },
+  "rank_cdf": [
+    {
+      "rank": 0,
+      "success": 0.0
+    },
+    {
+      "rank": 1,
+      "success": 0.927
+    },
+    {
+      "rank": 2,
+      "success": 0.991
+    },
+    {
+      "rank": 3,
+      "success": 0.999
+    },
+    {
+      "rank": 4,
+      "success": 1.0
+    },
+    {
+      "rank": 10000,
+      "success": 1.0
+    }
+  ]
+}

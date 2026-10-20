@@ -4,6 +4,12 @@ We build honey encryption (HE), then measure how far an attacker's success rises
 1/10,000 baseline. That baseline only holds with uniform PINs, a correctly matched DTE and no side
 information. We never attack AES. Every attack targets the 4-digit PIN space and the DTE.
 
+**Final results:** read [CONCLUSION.md](CONCLUSION.md) for the findings and five
+selected figures, or [the evidence README](results/final-2026-10-20/README.md)
+for all 56,000 raw trial records, settings, summaries and reproduction commands.
+The completed study uses 1,000 trials per configuration; it supersedes the
+three-trial smoke charts described later in this README.
+
 ## Setup
 
 ```bash
@@ -40,23 +46,27 @@ A wrong PIN decrypts to a random seed, and the DTE turns that seed into a decoy.
 | `dte/weak_card.py` | done | uniform 16 digits (Scenario A baseline) |
 | `dte/good_card.py` | done | inverse-CDF: network → BIN → digits → Luhn |
 | `dte/luhn.py` | done | `luhn_check_digit`, `is_luhn_valid` (shared) |
-| `dte/rsa_prime.py` | stub | next-prime DTE for real-size RSA primes |
+| `dte/rsa_prime.py` | done | reversible next-prime DTE, separate prime sampler; gap-biased decoys |
 | `attacks/brute_force.py` | done | decrypt under all 10,000 PINs |
 | `attacks/format_filter.py` | done | Luhn / prefix / BIN filters |
 | `attacks/pin_ranking.py` | done | DataGenetics PIN popularity |
 | `attacks/ranking.py` | done | `order_by_score` (random tie-break), `rank_of` (shared) |
 | `attacks/side_info.py` | done | known bank, known last 4 digits (combine with PIN ranking) |
 | `attacks/two_card.py` | done | k cards under one PIN (simple and Bayes-optimal ranking) |
-| `attacks/rsa_verify.py` | stub | `N % p == 0` |
+| `attacks/rsa_verify.py` | done | proper-divisor verification; preserves all matching PIN-factor pairs |
 | `experiments/card_pairs.py` | done | correlated real-card wallet generator (`rho`) |
-| `experiments/success_vs_baseline.py` | stub | main results: rank / success vs 1/10,000 |
-| `experiments/aes_mode_pitfall.py` | stub | GCM/CBC vs CTR side demo |
+| `experiments/success_vs_baseline.py` | done | card attack routes and complete configuration matrices |
+| `experiments/cli.py` | done | explicit experiment selections, suites, progress and separate RSA dispatch |
+| `experiments/plot_results.py` | done | saved-only diagnostic plots and five-figure presentation selection |
+| `experiments/results.py` | done | rank summaries, reproducibility metadata, CSV/JSON save/load |
+| `experiments/aes_mode_pitfall.py` | done | seeded CTR/GCM/CBC acceptance comparison and CLI |
 | `experiments/demo_card_attacks.py` | done | real card's rank under every card attack (`--trials N`) |
 | `experiments/check_bayes_prediction.py` | done | two-card attack: predicted vs measured rank-1 success (`--k`, `--trials`) |
 | `data/` | done | `bin_list.csv`, `pin_frequencies.csv` (+ generator script); see `data/README.md` |
-| `tests/` | done for the finished parts | pytest |
+| `results/final-2026-10-20/` | recorded | final raw card trials, RSA/AES evidence and five selected charts |
+| `tests/` | done | pytest |
 
-Each stub's docstring describes what goes there and the agreed requirements for it.
+See `DECISIONS.md` for scope, ownership and the implementation decision log.
 
 ## The DTE interface
 
@@ -107,6 +117,398 @@ decrypt(dte, ct, "4821")       # '4111111111111111'
 decrypt(dte, ct, "0000")       # a decoy, no error
 brute_force(ct, dte)           # [('0000', ...), ..., ('9999', ...)]
 ```
+
+## RSA prime DTE
+
+The RSA DTE works with the same framework as the card DTEs:
+
+```python
+from random import Random
+from dte.rsa_prime import RSAPrimeDTE, generate_real_prime
+from framework.he import encrypt, decrypt
+
+rng = Random(2026)  # Reproducible experiment only; omit rng for secure defaults.
+dte = RSAPrimeDTE(1024)
+p = generate_real_prime(1024, rng)
+ct = encrypt(dte, p, "0042", rng)
+assert decrypt(dte, ct, "0042") == p
+decoy = decrypt(dte, ct, "0000")  # Another 1024-bit prime candidate; no error.
+```
+
+1024-bit primes use 144-byte seeds, so their serialized ciphertexts occupy
+176 bytes including salt and nonce. A small-size collision can make a wrong-PIN
+candidate equal the real prime; distinct output is not a required guarantee.
+
+**Distribution limitation:** next-prime decoding favours primes with wider
+preceding intervals, clipped at the domain boundary. With four-bit primes,
+four residues lead to 11 and two to 13: approximately 2/3 versus 1/3. The generator
+samples primes independently by rejecting composite odd candidates. Extra seed
+bits reduce modulo bias; they do not remove this prime-gap bias. The exhaustive
+test temporarily uses a one-byte seed space: all 256 seeds give counts 172 for
+11 and 84 for 13. Actual seed sizes are unchanged by that test.
+
+This is a teaching prime-factor encoder, not a production RSA key generator.
+SymPy uses probable-prime testing for large integers rather than primality
+certificates. Valid prime decoys can still be verified against a public modulus;
+the RSA verification attack is a separate component. Tests cover small domains,
+framework integration, and a few 1024-bit round trips; they do not perform the
+full 10,000-PIN real-size attack.
+
+Public verification keeps every candidate proper factor of N, in input order:
+
+```python
+from attacks.rsa_verify import find_real_prime
+
+candidates = [("0000", 17), ("0042", 11), ("1234", 13), ("9999", 11)]
+assert find_real_prime(candidates, 143) == [
+    ("0042", 11), ("1234", 13), ("9999", 11),
+]
+```
+
+Finding a valid factor does not necessarily identify the original PIN uniquely.
+The verifier tests supplied integer candidates; it does not factor N from scratch.
+
+Run the narrated end-to-end demonstration from the repo root:
+
+```powershell
+.\.venv\Scripts\python.exe -m experiments.demo_rsa --bits 16 --seed 2026
+```
+
+It generates distinct p/q, encrypts p, enumerates all 10,000 PINs, and checks
+candidate divisibility against public N. The reduced-size seed-2026 example has
+16-bit factors and a 31-bit modulus: 10 candidate PINs match across both factors.
+The true PIN survives, but this toy example does not recover a unique PIN.
+
+For real-size factors, benchmark first and explicitly select the full run:
+
+```powershell
+# Optional arithmetic acceleration; SymPy detects it automatically.
+.\.venv\Scripts\python.exe -m pip install gmpy2
+.\.venv\Scripts\python.exe -m experiments.demo_rsa --bits 1024 --seed 2026 --benchmark-guesses 10 --benchmark-only
+.\.venv\Scripts\python.exe -m experiments.demo_rsa --bits 1024 --seed 2026 --output results/rsa-1024-seed-2026.json
+```
+
+The first benchmark in our environment estimated about 61 minutes with SymPy's
+pure-Python backend; optional gmpy2 2.3.2 reduced the estimate to about 8 minutes
+for the same inputs. These are extrapolations from 10 guesses, not full-run
+measurements. The original dependencies remain sufficient for correctness.
+
+**Measured full run:** with gmpy2 2.3.2 and seed 2026, all 10,000 guesses took
+777.245 seconds (about 13 minutes); public verification took 0.045071 seconds.
+The 2048-bit modulus had exactly one matching candidate PIN, `2381`, the true
+PIN, and one distinct verified factor. This is one reproducible experiment,
+not a guarantee that every trial identifies a unique PIN. The full record is
+versioned at `results/final-2026-10-20/evidence/rsa-1024.json`; the original
+record is also retained in the external OpenSpec workspace.
+
+`--output` saves all verified matches, generated demonstration inputs, seed,
+timings, software versions, active SymPy backend, Git state, and source checksums.
+It refuses to overwrite an existing file. Factor size and actual modulus size
+are reported separately: two 1024-bit factors can produce a 2047- or 2048-bit N.
+Normal tests use small all-PIN runs; the full real-size enumeration is explicit.
+
+Run the complete AES acceptance comparison:
+
+```powershell
+.\.venv\Scripts\python.exe -m experiments.aes_mode_pitfall --seed 2026
+```
+
+Measured seed-2026 results, with all 10,000 PINs attempted in each mode:
+
+| Mode | Accepted guesses | Acceptance check |
+|---|---:|---|
+| CTR | 10000 | None |
+| GCM | 1 | Authentication tag |
+| CBC + PKCS#7 | 45 | Valid padding |
+
+The function is also available directly:
+
+```python
+from experiments.aes_mode_pitfall import count_accepting_pins
+assert count_accepting_pins("CTR", seed=2026) == 10000
+```
+
+Each mode uses the same seed plaintext, salt, true PIN, and key derivation,
+with a suitable separate IV/nonce. Acceptance means the mode's checks pass, not
+necessarily that the original plaintext was recovered. Only the expected tag
+or padding failure is treated as a rejected guess; programming errors propagate.
+
+GCM's tag rejects wrong keys with overwhelming probability; the count of one
+is the observation for this fixture. CBC is weaker as a key check: a random
+final block has valid PKCS#7 padding with probability approximately
+`1/256 + 1/256**2 + ... + 1/256**16`, about 1/255. That predicts roughly 39
+accepted wrong guesses plus the true guess; the actual count varies. Seed 2026
+gave 45 total. Neither CBC tests nor the demo assume an exact survivor count.
+These rejection checks let an attacker remove decoys before DTE decoding, which
+explains the framework's CTR choice. The shared framework remains unchanged.
+
+## Final experiment harness
+
+The harness runs baseline, format, popularity, side-information and wallet experiments:
+
+```python
+from experiments.success_vs_baseline import run_trials
+
+result = run_trials("baseline", n_trials=3, seed=2026)
+print([row["rank"] for row in result["trials"]])  # [4915, 6030, 3450]
+control = run_trials("baseline-format", n_trials=3, seed=2026)
+weak = run_trials("format", n_trials=3, seed=2026, dte="weak")
+good = run_trials("format", n_trials=3, seed=2026, dte="good")
+```
+
+Both draw synthetic cards from the good DTE, choose uniform PINs, encrypt, and
+decrypt under all 10,000 PINs. `baseline` randomly orders equally scored
+candidates. `baseline-format` applies the existing format scorer, but every
+good-DTE candidate passes, so the same seeded tie-breaking gives the same ranks.
+Each control trial records 10,000 survivors at every format stage.
+
+`validate_setup` also accepts planned configurations without executing them:
+
+| Setup names | DTE choices | Current state |
+|---|---|---|
+| `baseline`, `baseline-format` | `good` | Runnable, uniform prior only |
+| `format` | `weak`, `good` | Runnable |
+| `pin`, `format-pin` | `weak`, `good` | Runnable |
+| `side-bank`, `side-last4`, `side-bank-last4`, `side-bank-last4-pin` | `good` | Runnable, accurate side information |
+| `wallet-simple`, `wallet-simple-pin` | `good` | Runnable, k=2/3/5 and rho=1 |
+| `wallet-bayes-pin` | `good` | Runnable, k=2/3/5 and rho in [0,1] |
+| `rsa-verify` | `rsa` | Explicit CLI selection reuses the separate RSA demo |
+
+Keyword options are `dte` (default `good`), `prior` (default `uniform`), `k`,
+and `rho`. Priors are `uniform`, `calibrated`, or `uniform-tail`; the baseline
+controls and planned RSA route require uniform PINs. Wallet defaults are k=2,
+rho=1, with allowed k=2/3/5. Only Bayes wallet ranking allows rho below one.
+Non-wallet setups reject k/rho. Unknown or incompatible options fail before
+encryption; defined future routes raise `NotImplementedError` rather than
+silently running a different experiment. RSA has its own result schema: select
+it through the CLI or call `run_demo`, rather than card-only `run_trials`.
+
+For popularity experiments, select `prior="calibrated"` explicitly; the default
+stays uniform. The chosen table is loaded once and used for victim PIN sampling
+and popularity scoring. `format-pin` sorts by `(format checks passed, PIN
+probability)`, so a valid card precedes an invalid card even with a less popular
+PIN. Ties use the seeded RNG. Nonuniform draws are sampled in one batch before
+the trials; uniform runs retain their original per-trial draw order. Metadata
+hashes the actual PIN table used, including the alternate `uniform-tail` table.
+
+Side-information routes reveal exactly their named facts: bank, last four,
+or both. Only `side-bank-last4-pin` also uses popularity. Bank comes from the
+real card's BIN metadata, and last four from its suffix. Accurate facts keep
+the true candidate consistent; incorrect or noisy information is outside this model.
+
+Wallet routes reuse the existing correlated generator, wallet encryption,
+all-PIN decryption, and ranking helpers. At rho=1 all real cards share a bank.
+Each card has fresh salt/nonce, but the same victim PIN. A candidate is
+`(guessed_pin, (card_1, ..., card_k))`; 10000 guesses yield 10000 wallets.
+`wallet-simple` uses same-bank consistency alone; `wallet-simple-pin` adds
+popularity; `wallet-bayes-pin` uses popularity times the wallet likelihood
+ratio. For a same-bank k-card wallet at rho=1 that ratio is `q_bank**(1-k)`;
+mixed-bank wallets score zero. Simple ranking passes `rho=None` to the helper;
+the generator and recorded experiment options still use rho=1 for simple rules.
+Bayes also supports intermediate rho and rho=0. Here rho is the probability of
+choosing the shared-bank generation branch; independent draws can still share a
+bank by chance. Its general likelihood ratio is `(1-rho)+rho*q_bank**(1-k)`
+for same-bank wallets and `1-rho` otherwise. At rho=0 all ratios are one, so
+ranking is exactly PIN popularity. Finite measured curves need not be monotonic.
+
+```python
+popular = run_trials("pin", 3, 2026, prior="calibrated")
+combined = run_trials("format-pin", 3, 2026, dte="weak", prior="calibrated")
+side = run_trials("side-bank-last4-pin", 3, 2026, prior="calibrated")
+wallet = run_trials("wallet-bayes-pin", 3, 2026, prior="calibrated", k=2)
+```
+
+These are synthetic model experiments: BIN weights are assumed and PIN tails
+are modelled from partial published frequencies. A few smoke trials check the
+pipeline, not real-world success rates or a universal lower bound.
+
+### Command-line runs and suites
+
+Run from the repository root using the Python environment. OpenSpec commands
+still run from the parent directory. Every output path below must be new.
+
+```powershell
+.\.venv\Scripts\python.exe -m experiments.success_vs_baseline --help
+.\.venv\Scripts\python.exe -m experiments.success_vs_baseline --setup baseline --trials 1 --seed 2026 --output results/baseline-example
+.\.venv\Scripts\python.exe -m experiments.success_vs_baseline --setup format-pin --dte weak --prior calibrated --trials 1 --seed 2026 --output results/combined-example
+.\.venv\Scripts\python.exe -m experiments.success_vs_baseline --setup wallet-bayes-pin --prior calibrated --k 2 --rho 0.5 --trials 1 --output results/wallet-example
+.\.venv\Scripts\python.exe -m experiments.success_vs_baseline --setup wallet-bayes-pin --prior calibrated --k 2 --rho-sweep --trials 1 --output results/rho-example
+.\.venv\Scripts\python.exe -m experiments.success_vs_baseline --family sensitivity --trials 1 --seed 2026 --output results/sensitivity-example
+.\.venv\Scripts\python.exe -m experiments.success_vs_baseline --suite smoke --output results/smoke-example
+```
+
+Use `--setup` for one custom configuration; its prior defaults to uniform.
+`--rho-sweep` selects five values 0/.25/.5/.75/1, Bayes only, using all k=2/3/5
+unless `--k` is specified. Named families/suites have fixed model settings and
+reject conflicting per-setup options. Available families are `single`, `side`,
+`wallet`, `correlation`, and `sensitivity`; they default to one trial per row.
+
+| Selection | Configurations | Card decryptions at one trial per row |
+|---|---:|---:|
+| smoke suite | 10 representative rows | 150000 |
+| single family | 6 | 60000 |
+| side family | 4 | 40000 |
+| wallet family | 9 | 300000 |
+| correlation family | 15 | 500000 |
+| sensitivity family | 46 paired prior rows | 1300000 |
+| full suite | 56 unique rows | 1470000 |
+
+The sensitivity family pairs calibrated and uniform-tail priors for every
+ranking that uses PIN probability, including all k/rho Bayes rows; it does not
+rerun format-only or side-only attacks as prior-dependent rankings. The full
+suite combines all agreed card rows and alternate-prior counterparts without
+duplicating Bayes rho=1 configurations. BIN inputs stay fixed. The two priors
+retain the published top-PIN information but model the remaining tail differently;
+compare measured outcomes rather than assuming a universal lower bound.
+
+`--suite full` defaults to **1000 trials per row**, or 1.47 billion card
+decryptions. It is explicit and can be expensive; implementation smoke checks
+do not launch it. Override `--trials` when intentionally checking the matrix
+with fewer trials. The completed full study is versioned under
+`results/final-2026-10-20/`; do not rerun it merely to regenerate charts.
+
+All card selections save a `suite.json` plus one result subdirectory per
+configuration. The manifest records normalized options, seed, folder name and
+planned/complete status. Each completed run is saved before the next starts;
+unfinished runs retain planned status. Automatic resume is not implemented.
+The CLI prints the workload and all setup seeds before execution, then trial
+progress at trial 1, every 10 trials and completion.
+
+Seed assignment is `base_seed + first-seen configuration index`, excluding
+the prior from configuration identity. Paired priors therefore share seeds;
+each run still samples and scores using its own table. A seed can differ across
+families because row order differs: use the recorded per-run seed to reproduce
+a result with `--setup`, its exact options, and its original trial count.
+
+RSA is excluded from every card family and suite. Select it explicitly:
+
+```powershell
+.\.venv\Scripts\python.exe -m experiments.success_vs_baseline --setup rsa-verify --bits 16 --seed 2026 --output results/rsa-small-example.json
+```
+
+This calls the existing demo and saves its separate verification measurements,
+not card rank statistics. Real-size enumeration requires explicit `--bits 1024`;
+the already-recorded real-size evidence need not be rerun. RSA supports one
+trial per invocation here; use the standalone demo for benchmark-only options.
+
+The result is a plain dictionary. `metadata` records options, analytical 0.0001
+baseline, maximum-PIN-prior reference with its assumptions, elapsed time, and
+an environment snapshot (UTC time, versions, Git revision/dirty state, source
+and actually used data-file checksums). `trials` contains index, setup, DTE,
+prior, k/rho, four-character true PIN, rank, and candidate count. Format rows
+also contain cumulative survivor counts. PINs remain text, preserving zeroes.
+
+`summary` reports trial count, rank-one successes/rate, 95% Wilson interval,
+median rank, success at guess budgets 1/10/100/1000/10000, and empirical rank CDF.
+For ranks `[1,2,1,4]`, success is 2/4=50%, median is 1.5, and the Wilson interval
+is approximately 15.0%-85.0%. Rates are fractions (0.5 means 50%). The maximum
+PIN prior is a matched-message/no-extra-evidence reference, not a ceiling for
+format mismatch or side-information attacks.
+
+Save and reload a new output folder explicitly:
+
+```python
+from experiments.results import save_results, load_results
+save_results(weak, "results/format-weak-example")  # Refuses an existing folder.
+restored = load_results("results/format-weak-example")
+assert restored == weak
+```
+
+Each folder contains `trials.csv`, `summary.csv`, `summary.json`, and
+`metadata.json`. The CSV funnel column stores a JSON dictionary; k/rho are
+blank for single cards. The loader restores types and checks trial counts,
+ranks, and agreement of summaries with raw records. Missing/malformed files
+raise clear errors. Loading never calls encryption.
+
+### Plot saved evidence
+
+Plotting uses saved files only; it does not call encryption, brute force, or the
+RSA/AES demos. Supply one or more result directories, or a completed suite
+directory. Every chart is exported as PNG and SVG into a new output directory.
+
+```powershell
+.\.venv\Scripts\python.exe -m experiments.plot_results results/smoke-example --output results/smoke-charts
+.\.venv\Scripts\python.exe -m experiments.plot_results results/my-complete-card-suite --kind wallet --output results/wallet-charts
+.\.venv\Scripts\python.exe -m experiments.plot_results results/my-complete-card-suite --kind prior --output results/prior-charts
+```
+
+The default `--kind cards` creates grouped rank-one rates with 95% Wilson
+intervals and empirical success-versus-guess-budget curves. Labels include n,
+DTE/prior and wallet parameters; axes use percentages. Rate points and interval
+endpoints come directly from saved summaries. The 0.01% analytical baseline
+has a separate zoom (with intervals extending beyond the zoom explicitly
+labelled). Nonuniform-prior panels also label the maximum PIN prior as a
+matched-message/no-extra-evidence reference, not an attack-success ceiling.
+
+A rank CDF answers: "In what percentage of trials did the true PIN rank at most
+g?" For saved ranks `[1,2,10,100]`, it is 25% at budget 1 and 75% at budget 10.
+Steps use the saved `rank_cdf`; logarithmic spacing above one keeps small guess
+budgets readable while still showing zero. No CDF confidence band is implied.
+
+`--kind wallet` requires complete Bayes grids for k=2/3/5 and rho=0/.25/.5/.75/1
+for each selected prior. It also compares simple/simple-plus-PIN/Bayes at rho=1
+when simple-rule runs are present. `--kind prior` requires calibrated and
+uniform-tail counterparts for every selected PIN-scored configuration. Prior
+comparisons are split across pages of at most eight configurations. Incomplete
+suites, duplicate configurations and incompatible BIN/per-prior PIN checksums
+raise clear errors; select one saved run per configuration rather than silently
+pooling separate runs. Each point has its own Wilson interval; connecting rho
+points does not assert monotonicity or statistical significance.
+
+AES and RSA use separate count charts, reading their original saved JSON:
+
+```powershell
+.\.venv\Scripts\python.exe -m experiments.plot_results --kind evidence --aes results/final-2026-10-20/evidence/aes.json --rsa results/final-2026-10-20/evidence/rsa-1024.json --output results/evidence-charts
+```
+
+Use `--kind all` with a complete card suite and `--aes`/`--rsa` to export all
+chart families. AES acceptance is a mode-check count; RSA factor verification
+is a separate count; neither is a card rank-one success percentage. Log count
+axes keep the small counts visible and every bar is annotated with its value.
+`charts.json` records chart names, plot-source SHA-256, original file hashes,
+saved metadata/summaries and evidence-file hashes, so figures trace to inputs.
+
+For the five selected presentation figures, use the recorded full results:
+
+```powershell
+.\.venv\Scripts\python.exe -m experiments.plot_results results/final-2026-10-20/cards --kind presentation --aes results/final-2026-10-20/evidence/aes.json --rsa results/final-2026-10-20/evidence/rsa-1024.json --output results/my-presentation-charts
+```
+
+This selects the main card attack comparison, guess budgets, calibrated wallet
+correlation, AES acceptance and RSA verification. Use `--kind all` for the
+larger diagnostic set. [CONCLUSION.md](CONCLUSION.md) explains what each supports.
+
+### Integrated three-trial smoke evidence
+
+The completed integration check is outside the repo at
+`../openspec/changes/kee-rsa-and-experiments/integration-7-2-7-3-8-1/`.
+Its `report.md` links the full coverage inventory, per-run seeds/options, CLI
+log, replay check and final charts. All 56 unique configurations completed with
+three trials each: 168 trials and 4.41 million card decryptions. Every saved
+result loaded correctly, and a k=3/rho=.5 wallet replay with seed 2053 reproduced
+ranks `[1,1023,1]` and its summary. The saved RSA/AES source hashes still match
+the relevant code; existing real-size evidence was reused without re-enumeration.
+
+The final export contains 32 figures, each as PNG and SVG, in `figures/`.
+Known synthetic ranks verify the plotted numbers; tests forbid cryptographic
+execution during plotting. Exported baseline, wallet, sensitivity, AES and RSA
+charts were opened for visual inspection; CDF legends sit outside the axes and
+RSA labels use separate lines to prevent collisions. All 425 tests passed.
+With n=3 the rates jump by 33.3 percentage points and intervals are very wide;
+this checks mechanics and coverage, not precise probabilities. The completed
+1000-trial matrix and its selected final figures are now versioned under
+`results/final-2026-10-20/` and explained in [CONCLUSION.md](CONCLUSION.md).
+
+In the three-trial seed-2026 smoke run, weak-DTE format ranks were 1/1/1;
+the good-DTE ranks stayed 4915/6030/3450. Both generate real cards from the same
+good model; only the encoding DTE changes. Weak final BIN counts were 1/1/1,
+while every good-DTE format stage retained 10000 candidates. This validates
+integration; three trials do not establish a precise attack success rate.
+
+The three-trial example has no rank-one successes. This is a mechanics check,
+not evidence that success probability is zero: at the 1/10,000 baseline even
+1,000 trials expect only 0.1 successes. Use analytical references and, later,
+confidence intervals rather than demanding exactly 0.01% from a small sample.
 
 ## Randomness rule (reproducibility)
 

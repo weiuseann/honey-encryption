@@ -54,13 +54,14 @@ Core claim
 |---|---|
 | Framework (`framework/he.py`), DTE base, weak card DTE, brute force, tests | Done |
 | Good card DTE (`dte/good_card.py`), Luhn helper (`dte/luhn.py`), their tests | Done |
-| RSA prime DTE | Stub |
+| RSA prime DTE | Done: domain, decoder, sampler, encoder, real-prime generation, framework integration, exact toy bias counts, and 1024-bit smoke checks |
 | Attacks: format filter, PIN ranking, side info (bank, last-4), shared ranking helper, their tests, demo | Done |
 | Attacks: two-card (k cards, simple + Bayes-optimal rule), its tests, demo rows | Done |
-| Attacks: RSA verify | Stub |
+| Attacks: RSA verify | Done: proper-divisor filter plus small and real-size end-to-end evidence |
+| RSA narrated demo (`experiments/demo_rsa.py`) | Done: small demonstration and full 10,000-PIN 1024-bit run verified and recorded |
 | Experiments: card pairs (`generate_wallet`), demo (`demo_card_attacks.py`), Bayes prediction check (`check_bayes_prediction.py`) | Done |
-| **Next (Kee):** final harness `experiments/success_vs_baseline.py` | Stub. Card setups to cover, each vs the 1/10,000 baseline and the 10.7% top-PIN bound: weak and good DTE under format filter, PIN ranking and format + PIN; good DTE with side info (bank, last-4, bank + last-4, bank + last-4 + PIN); two-card k = 2/3/5 with the simple rule and the Bayes rule (Bayes for any rho sweep); and the PIN-ranking setups re-run with `pin_frequencies_uniform_tail.csv` as the sensitivity check |
-| Experiments: AES mode pitfall | Stub |
+| Final harness, evidence and results guide (Kee) | Done: all routes/suites/plots, 56 configurations x 1000 trials, versioned raw evidence, five selected figures and CONCLUSION.md. Final user review and shared presentation preparation remain. |
+| Experiments: AES mode pitfall | Done: seeded three-mode acceptance comparison, measured counts, CLI, and tests |
 | `data/bin_list.csv` | Done (20 BINs) |
 | `data/pin_frequencies.csv` (+ uniform-tail variant, generator) | Done |
 
@@ -316,10 +317,467 @@ Slides, the demo script and Q&A prep are shared. This replaces the earlier split
 slides and charts and the harness was shared.
 **Where:** Ownership and Status tables above.
 
+### 2026-10-18: RSA DTE domain bounds and seed capacity (Kee, task 2.1)
+**Decision:** support Python integer bit counts `b >= 3`, rejecting booleans and non-integers.
+Let `L = 2**(b-1)`, `U = 2**b - 1`, and `Pmax = prevprime(U + 1)`. Prepare the
+next-prime input domain `x = L-1` through `Pmax-1`, inclusive, with
+`M = Pmax - (L-1)` possible values. This covers every b-bit prime. For b=4,
+the input domain is 7 through 12; nextprime outputs only 11 or 13.
+**Why:** `nextprime` is strictly greater than its input. Allowing x up to U can
+produce a (b+1)-bit prime; stopping before Pmax prevents that overflow while
+retaining the largest valid prime. Starting at L-1 retains the smallest valid
+prime. Using `prevprime(U+1)` includes U when U itself is prime (e.g. b=3, U=7).
+**Seed capacity:** use `ceil((b+128)/8)` bytes, expressed with integer arithmetic
+as `(b+128+7)//8`. At least 128 extra bits make future modulo-reduction bias
+negligible; this does not fix the separate prime-gap bias. Final demonstrations
+are planned with 1024-bit factors; the constructor remains configurable for tests.
+**Where:** `dte/rsa_prime.py` constructor, `tests/test_rsa_prime_dte.py`.
+Only configuration is implemented in this task; encoding, decoding, and real-prime
+generation are still stubs. Their behavior is not claimed verified yet.
+
+### 2026-10-18: RSA seed decoding is total for the configured length (Kee, task 2.2)
+**Decision:** interpret seed bytes as a big-endian unsigned integer z, compute
+`x = (L-1) + (z % M)`, and return `int(nextprime(x))` using task 2.1's bounds.
+Reject a seed only if its length differs from the configured byte length; no
+correctly sized byte string is rejected for its value or decoded candidate.
+**Why:** wrong PINs yield arbitrary seed bytes. Rejecting any value within the
+expected seed length would provide a wrong-PIN clue. The bounded x range keeps
+all outputs within the configured prime bit length. Big-endian ordering matches
+the existing card encoders. The decoder is deterministic and draws no randomness.
+**Validation:** small domains are checked against independently enumerated primes
+using trial division, including every residue at low and high seed values; tests
+also cover zero/all-one seeds, seeded random bytes, and malformed lengths.
+**Where:** `RSAPrimeDTE.decode` and `tests/test_rsa_prime_dte.py`. Encoding and
+real-prime generation remain stubs; end-to-end RSA encryption is not complete.
+
+### 2026-10-18: Random seed preimages use rejection sampling (Kee, task 2.3)
+**Decision:** a private integer helper takes the target's inclusive residue interval,
+modulus M, seed-space size S, and caller RNG. Draw residue j uniformly from the
+interval and repetition r uniformly from 0 through `S//M`, form `z = r*M+j`,
+and retry if `z >= S`. The helper returns the accepted integer; serialization
+and choosing the interval for a prime belong to the future encoder.
+**Why:** each proposed pair has equal probability and each valid seed has one
+representation. Rejecting out-of-range pairs therefore samples exactly uniformly
+from the valid preimages, including the partial last block. This is simpler than
+weighted interval bookkeeping. The extra repetition when S is divisible by M is
+always rejected; with the actual slack-bit seed space, retries are negligible.
+**Validation:** enumerate toy proposal pairs and compare accepted seeds against
+independently enumerated remainder membership. Force rejection followed by success,
+cover a singleton interval and a divisible seed space, and check reproducibility
+and decoder compatibility at actual seed capacity. For S=16, M=6, residues 4..5,
+the valid seeds are exactly 4, 5, 10, and 11.
+**Where:** `_sample_seed_integer` in `dte/rsa_prime.py` and its tests. The helper
+requires valid internal bounds and explicit randomness; future `encode` will
+validate messages and supply the caller RNG or secure default. Encoding and
+real-prime generation are not implemented by this task.
+
+### 2026-10-18: RSA encoding inverts strict next-prime intervals (Kee, task 2.4)
+**Decision:** accept integer primes in the configured domain, rejecting booleans,
+non-integers, composites, and out-of-range values. For prime p, its valid
+next-prime inputs run from `max(L-1, prevprime(p))` through `p-1`, inclusive.
+Subtract L-1 to obtain residue bounds, call the existing uniform preimage
+sampler, then serialize its integer as exactly the configured big-endian bytes.
+Use the supplied RNG or `default_rng()` when absent; no fixed seed in library code.
+**Why:** `nextprime(p)` skips p, so including p in the encoding interval breaks
+round trips. Clipping the first interval to L-1 makes it match the decoder's
+actual domain. Sampling a full seed preimage rather than storing p directly
+allows randomized encodings of the same prime and avoids exposing a small-seed
+representation. This does not remove the documented prime-gap distribution bias.
+**Where:** `RSAPrimeDTE.encode` and its tests. Tests cover all primes in small
+domains, seeded 16-bit samples, explicit first/last gap endpoints, controlled
+distinct seeds, repeatability, RNG selection, fixed-length bytes, and invalid inputs.
+Real-prime generation and the broader framework/bias checks remain future tasks.
+
+### 2026-10-18: Real RSA primes use independent odd-candidate rejection (Kee, task 2.5)
+**Decision:** construct the existing RSA DTE domain, then draw odd integers uniformly
+from `L+1` through Pmax inclusive using `randrange(L+1, Pmax+1, 2)`. Return the first
+candidate accepted by `isprime`; retry composites. Use the supplied RNG or the
+shared secure default. Constructor reuse keeps size validation and bounds in one place.
+**Why:** all supported primes are odd for b>=3. Every supported prime appears once
+in the uniform candidate set, so rejection gives uniform prime selection under
+ideal uniform randomness. Generating victims through next-prime decoding instead
+would favour larger preceding gaps and mask the DTE's distribution mismatch.
+This is a teaching prime sampler, not a complete production RSA key generator;
+SymPy's large-number predicate uses probable-prime testing rather than certificates.
+**Where:** `generate_real_prime` and tests in `tests/test_rsa_prime_dte.py`.
+Controlled RNGs exercise composite rejection and both boundary primes, including
+the prime upper endpoint. Tests also cover bit length, independent small-prime
+checks, encodability, reproducibility, secure-default selection, and invalid sizes.
+Full framework integration, real-size smoke checks, and explicit bias counts
+remain task 2.6; no modulus/key-pair generation is added here.
+
+### 2026-10-18: RSA DTE integration and bias evidence (Kee, task 2.6)
+**Validation:** the unchanged AES-CTR framework recovers generated primes under
+the correct PIN, and wrong PINs still decode to primes of the configured size.
+Ciphertext serialization and seeded encryption repeatability are covered. Tiny
+domains may collide, so tests do not assert every wrong-PIN output differs.
+**Bias evidence:** tests temporarily shrink only their local DTE instance to
+one-byte seeds and enumerate all 256 values. Expected counts use independently
+enumerated primes, clipped preceding-gap widths, full modulo blocks, and the
+partial final block. In the four-bit domain, 11 receives 172 seeds and 13 receives
+84; with normal slack bits the probabilities approach 4/6 and 2/6. This confirms
+prime-gap bias and distinguishes it from finite modulo bias rather than claiming
+uniform decoys or agreement with production RSA key generation.
+**Real-size smoke:** a seeded 1024-bit prime passes three DTE round trips,
+framework correct-PIN recovery, zero/all-one seed decoding, and one wrong-PIN
+decryption. Seeds are 144 bytes; serialized ciphertexts are 176 bytes. SymPy
+large-number primality checks are probable-prime checks, not certificates.
+**Where:** `tests/test_rsa_prime_dte.py`, `dte/rsa_prime.py` explanation, and
+README RSA usage/limitations. The DTE component is complete; RSA public
+verification and the full 10,000-PIN experiment remain separate unfinished work.
+
+### 2026-10-18: RSA verification returns all proper-divisor matches (Kee, task 3.1)
+**Decision:** `find_real_prime` keeps every candidate pair satisfying
+`1 < candidate < N` and `N % candidate == 0`, preserving input order and duplicate
+matches. Reject boolean/non-integer N and values N<=3 before processing candidates.
+N is assumed to be a supplied RSA modulus; these checks do not certify its key
+structure or compositeness. Candidate integers come from the DTE, so this filter
+does not repeat primality testing or factor N from scratch.
+**Why:** zero is unsafe to divide by, and 1 or N are trivial divisors. Both RSA
+factors may occur in candidates, and multiple PINs may produce the same factor,
+especially in toy domains. Selecting the first match or asserting exactly one
+would confuse factor recovery with unique original-PIN recovery.
+**Example:** with N=143, candidates 11 and 13 divide N; 17 does not. Every
+associated matching PIN is retained, including duplicate rows.
+**Where:** `attacks/rsa_verify.py`, `tests/test_rsa_verify.py`. This demonstrates
+public verification of guessed secrets, not a break of AES or an algorithm for
+factoring an arbitrary RSA modulus without candidate factors. Full encryption,
+10,000-PIN enumeration, and narrated reporting remain tasks 3.2 and 3.3.
+
+### 2026-10-18: Narrated RSA trial and optional arithmetic acceleration (Kee, tasks 3.2-3.3)
+**Decision:** `experiments/demo_rsa.py` composes existing prime generation,
+encryption, all-PIN brute force, and public verification. It generates distinct
+p/q with a recorded seeded RNG, chooses a uniform PIN, and reports all matches,
+distinct factor count, true-PIN survival, actual modulus size, and separate
+enumeration/verification timings. The default uses reduced 16-bit factors.
+**Why:** factor recovery and original-PIN uniqueness are different outcomes.
+The seed-2026 reduced-size example leaves 10 matching PINs across two factors;
+the true PIN survives. Real-size enumeration must be explicitly requested.
+**Reproducibility:** optional non-overwriting JSON output records generated inputs,
+software/backend versions, Git revision/dirty flag, and relevant source hashes.
+Repeated small trials reproduce deterministic fields; timings are measurements.
+**Performance:** 10 1024-bit guesses took 3.653s with the pure-Python SymPy backend,
+estimating roughly 61 minutes. The installed SymPy source confirms automatic
+gmpy2 support; optional gmpy2 2.3.2 was installed in the local environment, without
+making it a mandatory requirement. The same inputs then took 0.484s for 10 guesses,
+estimating roughly 8 minutes. These are estimates; full measurements are recorded
+separately once complete. No DTE/AES/attack algorithm was replaced or prime size
+reduced for speed. Benchmark p/q/N/PIN/ciphertext match across both backends.
+**Where:** `experiments/demo_rsa.py`, `tests/test_demo_rsa.py`, README usage;
+benchmark artifacts in the external OpenSpec change directory. User explicitly
+requested applying tasks 3.2 and 3.3 together for this turn.
+
+### 2026-10-18: Full real-size RSA experiment result (Kee, task 3.3)
+**Measured:** seed 2026, two distinct 1024-bit factors, actual N size 2048 bits,
+176-byte ciphertext, and all 10,000 candidate PINs. Public verification retained
+exactly one PIN-factor pair: PIN `2381`, the true PIN, with the original p.
+Brute-force enumeration took 777.2450963 seconds; verification took 0.045071
+seconds; total measured trial time was 777.6313182 seconds. The approximately
+8-minute accelerated ten-guess estimate understated the actual roughly 13-minute
+run, illustrating why sample timing is not a runtime guarantee.
+**Validation:** inspect p/q size, distinctness and primality predicate, p*q=N,
+every match's proper divisibility, true-PIN membership, counts, and source hashes;
+decrypt the saved ciphertext under the saved true PIN to recover p. Inputs match
+the earlier accelerated benchmark exactly. There is one matching factor/PIN in
+this measured run; uniqueness is not asserted as a universal guarantee.
+**Environment/artifact:** Python 3.11.4, SymPy 1.14.0, cryptography 50.0.2,
+optional gmpy2 2.3.2 (`gmpy` backend). Full record:
+`../openspec/changes/kee-rsa-and-experiments/rsa-1024-full-seed-2026.json`.
+The record includes generated inputs, actual timings, Git dirty state and source
+checksums, because the new demo code was not yet committed. No all-PIN real-size
+run is included in normal pytest.
+
+### 2026-10-18: CTR acceptance comparison reuses the shared cipher helper (Kee, task 4.1)
+**Decision:** use seeded experiment inputs with one 16-byte seed plaintext, salt,
+and true PIN shared by the future three-mode comparison. Prepare separate
+16-byte CTR/CBC IVs and a 12-byte GCM nonce. The CTR branch reuses `derive_key`,
+`ALL_PINS`, and the existing internal `_aes_ctr` helper, leaving the framework
+unchanged. It decrypts under every PIN and counts every output as accepted;
+there is no plaintext-equality, padding, authentication, or DTE-validity check.
+**Why:** the demo measures what a cipher can reject, not whether the original
+seed was recovered. A wrong CTR key still produces bytes. Reusing the existing
+helper avoids a second CTR implementation or a cipher abstraction layer.
+**Validation:** all 10,000 PINs are attempted and accepted, correct-key decryption
+recovers the seed, and a fixed wrong-key example returns different bytes without
+error. Fixture lengths, seeded repeatability, and unknown/unimplemented modes
+are tested. GCM/CBC and the three-mode CLI remain later tasks.
+**Where:** `experiments/aes_mode_pitfall.py`, `tests/test_aes_mode_pitfall.py`.
+The user requested independent work while the full RSA experiment was running;
+this permits task 4.1 before that experiment finishes, without starting 4.2.
+
+### 2026-10-19: GCM tag verification rejects candidate keys (Kee, task 4.2)
+**Decision:** encrypt the shared fixture with AESGCM, then attempt all 10,000
+PIN-derived keys against the same ciphertext/tag and 12-byte nonce. Count
+successful authentication only. Catch `InvalidTag` specifically; do not compare
+the output to the known secret plaintext or swallow unrelated errors.
+**Why:** the attacker can perform this public acceptance test without knowing
+the plaintext. It reveals wrong PINs before the DTE could provide decoys.
+**Measured:** seed 2026 accepts one guess. Correct-key authentication and
+selected wrong-key failures are tested; the fixture's measured count is not a
+universal claim that false acceptance is mathematically impossible.
+**Where:** `experiments/aes_mode_pitfall.py`, `tests/test_aes_mode_pitfall.py`.
+
+### 2026-10-19: CBC acceptance is valid padding, not plaintext equality (Kee, task 4.3)
+**Decision:** PKCS#7-pad the shared 16-byte seed (adding a complete padding block),
+encrypt using CBC with the fixture's 16-byte IV, and count guesses only when
+unpadding succeeds. Catch `ValueError` only around PKCS#7 unpadding, leaving
+cipher setup and decryption errors visible. Add `--seed` CLI for all three modes.
+**Why:** random decrypted last blocks occasionally have valid padding. Under a
+random-output approximation, acceptance probability is sum(256**(-k), k=1..16),
+about 1/255: roughly 39 wrong guesses plus the correct guess, not a guaranteed
+single-digit count. No equality check against the original plaintext is used.
+**Measured:** seed 2026: CTR 10000, GCM 1, CBC 45 accepted guesses out of 10000
+per mode. CBC therefore accepted 44 wrong guesses in this experiment. Tests
+cover known valid/invalid padding, correct-key recovery, all-PIN enumeration,
+repeatability, and the CLI without requiring a universal exact CBC count.
+**Where:** AES comparison module/tests and README usage. The existing CTR-only
+framework is unchanged. User explicitly requested tasks 4.2 and 4.3 together.
+
+### 2026-10-19: Harness setup contracts and raw result format (Kee, task 5.1)
+**Decision:** retain `run_trials(setup, n_trials=1000, seed=0)` and add explicit
+keyword DTE/prior/k/rho options. A small table lists allowed setup/DTE pairs;
+`validate_setup` checks and normalizes options without loading data or executing
+an experiment. Priors default to uniform; baseline controls and RSA require it.
+Wallet defaults are k=2/rho=1, allowed k=2/3/5; rho below one requires Bayes.
+Non-wallet setups reject wallet options. Defined but unfinished routes raise
+NotImplementedError before any trial work rather than silently substituting.
+**Why:** explicit names and plain dictionaries keep the teaching harness readable
+and prevent misleading comparisons caused by wrong combinations. No plugin
+system, inheritance, or new configuration framework is needed.
+**Result contract:** return metadata (normalized options, candidate-space size,
+baseline reference), raw trials (one-based trial, setup, true PIN, rank,
+candidate count, optional funnel), and `summary=None` pending statistics.
+This does not claim file saving or other attack integrations are implemented.
+**Where:** `experiments/success_vs_baseline.py`, its new tests, and README table.
+
+### 2026-10-19: Uniform matched-DTE baseline and format-only control (Kee, task 5.2)
+**Decision:** use one seeded Random per run for real-card sampling, uniform PIN
+choice, randomized encryption, and tie shuffling. Sample messages from the good
+DTE, call existing encryption/brute-force helpers, then record the true PIN's
+one-based rank. Baseline scores all candidates equally; baseline-format reuses
+the format ranker and records stage counts. All good-DTE candidates pass, so
+the same seed gives the same ranks in both controls.
+**Measured smoke:** seed 2026 with three trials gives ranks 4915, 6030, 3450
+for true PINs 8385, 6063, 1017; all 10,000 candidates survive each format stage.
+**Why:** the control isolates the matched-message/uniform-key/no-side-info
+assumptions behind the 1/10,000 analytical rank-one baseline. Small Monte Carlo
+runs need not observe a first-guess success and cannot establish zero risk.
+Rank measurement uses the original PIN, not first equal plaintext.
+**Where:** harness/tests/README; tests execute actual encryption and candidate
+enumeration, check recovery, reproducibility, and the all-tied format control.
+User explicitly requested tasks 5.1 and 5.2 together. Summary statistics,
+automatic saving, plotting, and other setups remain later tasks.
+
+### 2026-10-19: Rank summaries use Wilson intervals and empirical guess budgets (Kee, task 5.3)
+**Decision:** use the existing SciPy binomial-test Wilson interval API at 95%
+confidence. Summarize original-PIN ranks with successes/count/rate, interval,
+median, success at budgets 1/10/100/1000/10000, and the empirical CDF. Validate
+nonempty integer ranks in 1..10000. Compute the maximum PIN prior from the loaded
+table when requested, labelling it as a matched-message/no-extra-evidence reference.
+**Why:** zero observed successes do not prove zero probability. For 0/1000,
+the Wilson upper endpoint is about 0.00382676 (0.383%), despite an observed zero.
+Known ranks [1,2,1,4] give 50% success, median 1.5, interval about 15%-85%.
+No custom statistics framework or new dependency is required.
+**Where:** `experiments/results.py`, summary tests, harness metadata/summary.
+
+### 2026-10-19: Result folders preserve raw evidence and software/data identity (Kee, task 5.4)
+**Decision:** explicitly save a new directory containing trials.csv, summary.csv,
+summary.json, and metadata.json; refuse an existing directory. Keep PIN strings
+as text and serialize optional format funnels as JSON CSV cells. Load without
+running experiments, restoring numerical types and checking counts/summaries.
+**Reproducibility:** capture settings, per-run seed, actual n, elapsed seconds,
+UTC timestamp, Python/dependency versions, Git revision/dirty flag, relevant
+source hashes, and hashes of actual data inputs before running. Normalize data
+identifiers with forward slashes for portability. Compare seeded results excluding
+elapsed time and creation timestamp; everything deterministic must agree.
+**Why:** figures and reports must trace to inspectable trial evidence and be
+reusable without repeating cryptography. Metadata reflects uncommitted source
+honestly through dirty state and checksums. No database or generic storage layer.
+**Where:** result helpers/tests and README output schema. Small saved examples
+are outside the repo under the external OpenSpec change's
+`harness-smoke-5-3-5-4-6-1/` directory.
+
+### 2026-10-19: Format experiment changes the encoder, not the real-card model (Kee, task 6.1)
+**Decision:** sample all victim cards with GoodCardDTE.sample, then encrypt using
+the selected weak/good DTE. Reuse the good model's BIN metadata and existing
+format ranker/funnel. PINs remain uniform for this stage; nonuniform sampling
+and popularity ranking belong to the next task.
+**Measured smoke:** seed 2026, three weak runs have rank 1 each and final BIN
+count 1 each. Good runs have ranks 4915/6030/3450, with 10000 candidates passing
+every check. The baseline and good-format control agree exactly. These are
+mechanics checks, not precise estimated real-world success probabilities.
+**Why:** weak-DTE decoys mismatch the real-card format; good-DTE decoys pass the
+same public checks as real cards. Tests verify monotonic funnels, true-card
+survival, actual weak/good encryption routes, and controlled invalid decoys.
+**Where:** harness/tests/README; Seann's DTE/filter/ranking code is unchanged.
+User explicitly requested tasks 5.3, 5.4, and 6.1 together.
+
+### 2026-10-19: Matched PIN priors and format-first composition (Kee, task 6.2)
+**Decision:** load the selected nonuniform table once, draw victim PINs with
+sample_pins, and reuse those frequencies for popularity scoring and the maximum
+prior reference. Record the actual table checksum. Uniform remains the default
+and retains the previous RNG draw order; nonuniform draws are batched first.
+Combined ranking uses (checks_passed, probability), with seeded random ties.
+**Why:** comparing victims drawn from one prior with an attacker using another
+would introduce an unrequested mismatch. Public format evidence takes priority
+over popularity. The alternate prior can be selected individually; sensitivity
+suite orchestration remains task 6.6. No universal lower-bound claim is inferred
+from the partially modelled PIN tail or assumed BIN weights.
+**Where:** harness, integration tests, README; Seann's helpers unchanged.
+
+### 2026-10-19: Expose only declared accurate side information (Kee, task 6.3)
+**Decision:** derive the victim bank from the same BIN metadata and last four
+from the actual card. Pass only the facts named by the selected setup. Only
+the combined-plus-PIN route receives popularity scores. All use good DTE.
+**Why:** accidentally supplying an extra fact would inflate measured success.
+These trials assume accurate information; they do not model noisy observations.
+**Where:** harness routing and tests of the actual arguments/recovery.
+
+### 2026-10-19: Reuse correlated wallet pipeline at rho one (Kee, task 6.4)
+**Decision:** use generate_wallet/encrypt_wallet/brute_force_wallet/rank_wallets
+directly for k=2/3/5. One PIN protects all cards with fresh salts/nonces; each
+guess produces one candidate tuple. Simple ranking receives rho=None; Bayes
+receives numeric rho=1. Store normalized k/rho in metadata and trial rows.
+**Why:** individually matched cards can still reveal cross-card correlation.
+Bayes weights a same-bank match by q_bank**(1-k), so rarer matches carry more
+evidence. Non-unit rho execution remains explicitly pending task 6.5.
+**Where:** harness/tests/README. No teammate-owned implementation changed.
+User explicitly requested tasks 6.2, 6.3, and 6.4 together after commit/push.
+**Verification for the batch:** full suite 386 passed in 62.39s; diff whitespace
+check passed. Eleven three-trial seed-2026 calibrated-prior runs were saved and
+reloaded externally. Good-DTE PIN ranks were 248/247/235; combined bank/last4/PIN
+ranks 1/1/1; k=2 simple-plus-PIN 54/35/52 and Bayes-plus-PIN 86/9/4. These tiny
+runs check mechanics, not precise rates; Bayes need not win every individual
+trial. Detailed traces and artifacts live with the external OpenSpec change.
+
+### 2026-10-19: Bayes correlation sweep and independent-wallet control (Kee, task 6.5)
+**Decision:** support rho in [0,1] for Bayes runs and enumerate 0/.25/.5/.75/1
+for k=2/3/5. Pass the identical numeric rho to victim generation and ranking.
+Simple rules remain rho=1 only. Rho is a mixture-branch probability, not the
+overall chance of matching banks: independent draws can match by coincidence.
+**Why:** at rho=0 the likelihood ratio is one for every wallet, so Bayes must
+equal PIN ranking for identical candidates and tie RNG. At rho=1 mixed wallets
+have score zero. Finite measured curves need not be monotonic.
+**Where:** harness matrix/routes and integration tests; Seann's model unchanged.
+
+### 2026-10-19: Paired prior-sensitivity matrix (Kee, task 6.6)
+**Decision:** enumerate calibrated and uniform-tail pairs for all PIN-scored
+single-card, combined side-info/PIN, simple-wallet/PIN and Bayes-wallet/PIN
+configurations, including every k/rho sweep row. This gives 46 paired rows.
+Use identical options and per-configuration seeds except for the selected prior.
+Victim sampling and scoring share that run's table; record actual input hashes.
+**Why:** published popular-PIN information does not determine the full tail.
+Measured sensitivity is preferable to inferring universal real-world lower
+bounds from partial concentration statistics. BIN data stays fixed; generated
+frequency CSVs are unchanged. Output names include prior, k and rho.
+**Where:** experiment_matrix and suite naming/seeding, tests, README.
+
+### 2026-10-19: Explicit CLI workloads, saved manifests and separate RSA (Kee, task 7.1)
+**Decision:** implement --setup, --family, --suite smoke/full, trial/seed/model
+options, Bayes rho sweep and required new output path. Validate all rows first;
+print decryptions/options/seeds before execution, and trial progress during runs.
+Record a suite.json with planned/complete states and save each completed run.
+Seed = base + first-seen configuration index excluding prior; record exact seeds
+because indices can differ between families. Reproduce with standalone options.
+**Workload:** smoke has 10 rows, full has 56 unique card rows; one trial per full
+row costs 1.47 million card decryptions. Only explicit full defaults to 1000
+trials (1.47 billion decryptions); other selections default to one. Automatic
+resume is not implemented. No full evidence collection is implied by CLI work.
+**RSA:** excluded from all card suites, selected explicitly, reusing run_demo
+and its existing separate JSON schema. Default 16-bit factors; real-size 1024
+must be explicit. Do not force verification outcomes into card rank summaries.
+**Where:** small experiments/cli.py, harness entry point/matrix, metadata source
+hashes, CLI tests and README commands. No new dependency or teammate edits.
+User explicitly requested these three next unfinished subtasks together.
+**Verification:** 419 tests passed in 64.28s; whitespace and strict OpenSpec
+validation passed. Actual CLI smoke/single/rho/paired-prior commands produced
+24 card result folders, all loaded and checked against manifests. One wallet
+rerun with recorded seed/options reproduced ranks and summary. Small explicit
+RSA CLI run retained the true PIN among 10 verified PINs; no real-size rerun.
+Saved one-trial rho ranks were 241/293/1/217/1 for 0/.25/.5/.75/1; these validate
+mechanics and do not establish monotonicity or precise probabilities.
+
+### 2026-10-19: Plot saved card rates and guess budgets (Kee, task 7.2)
+**Decision:** use a small headless Matplotlib module that imports result loading,
+not experiment execution. Read cross-checked raw/summary files; group by family,
+prior and wallet size. Export PNG/SVG plus charts.json identifying input hashes,
+saved metadata/summaries and plot-source hash. Refuse existing output folders.
+**Interpretation:** rate points and Wilson endpoints are saved fractions times
+100. CDF uses right-continuous saved rank steps. Show n and units; provide a
+0-0.05% baseline zoom alongside the full scale, explicitly noting clipped
+intervals. Label top-PIN prior as a reference conditional on no extra evidence.
+No CDF confidence band is claimed. Keep legends outside CDF axes.
+**Where:** experiments/plot_results.py, synthetic saved-rank/export tests, README.
+
+### 2026-10-19: Separate wallet, prior, AES and RSA comparisons (Kee, task 7.3)
+**Decision:** require complete k=2/3/5 Bayes rho grids for selected priors; compare
+simple/simple-plus-PIN/Bayes at rho=1 when the simple rule is present. Pair
+calibrated/uniform-tail configurations and paginate at eight rows. Reject
+duplicate configurations and incompatible BIN/per-prior PIN hashes rather
+than silently pooling or mixing models. Do not infer monotonic finite curves.
+**Separate measures:** AES charts count mode-check acceptance; RSA charts count
+enumerated PINs, verified PINs and factors with timing/context. These use saved
+evidence and are never presented as card rank-one rates. Annotated log count
+axes preserve visibility. RSA multiline labels avoid adjacent text collisions.
+**Where:** plotting module/tests and README; no card helper or crypto changes.
+
+### 2026-10-19: Complete small matrix before full evidence run (Kee, task 8.1)
+**Decision:** explicitly select all 56 card configurations with three trials
+each, seed 2026: 168 trials and 4.41 million card decryptions. Save each row,
+audit metadata/options/source/data hashes, load every result, reproduce one
+standalone wallet run, and render all chart families using original AES/RSA
+evidence. Full evidence collection at 1000 trials remains task 8.2.
+**Verified:** all 56 configurations complete; k=3/rho=.5 calibrated Bayes replay
+using recorded seed 2053 matches ranks 1/1023/1 and summary. Original AES/RSA
+source hashes match current crypto code; saved RSA p*q, sizes and verified
+divisor checked independently. No real-size enumeration or AES rerun needed.
+**Charts/tests:** 32 figures exported as PNG/SVG and visually checked; known-rank
+tests check numerical rates, Wilson endpoints and CDF, with crypto calls forbidden
+for plotting. Full suite 425 passed in 70.42s. Post-layout focused verification
+also covers the final RSA label adjustment. With n=3 the uncertainty is wide;
+these are mechanics checks, not precise real-world success estimates.
+**Evidence:** external integration-7-2-7-3-8-1/report.md, coverage.csv, cards/
+manifest/results, replay-check.json, CLI/test logs and figures/charts.json.
+User requested tasks 7.2, 7.3 and 8.1 together. Prior work committed/pushed as
+e69c1c0; this batch remains uncommitted for review. No teammate-owned changes.
+
+### 2026-10-20: Completed full card matrix and checked observed variation (Kee, task 8.2)
+**Evidence:** all 56 configurations completed with 1000 trials each: 56000
+victims and 1.47 billion card decryptions, sum of run times 38594.880 seconds.
+Every raw file loaded with summary checks; source/data hashes matched audited
+code and inputs. Revisions e69c1c0/e615caa span a plotting/documentation commit;
+the recorded execution-source hashes are unchanged. Original metadata retained.
+**Findings:** weak-format first-guess success 99.0%; good-format 0/1000 observed;
+good PIN-only 11.8%; accurate bank/last4/PIN 95.0%. Calibrated Bayes rho=1 rates
+are 18.1%/27.3%/61.0% for k=2/3/5. Alternative-tail five-card Bayes is 56.8%.
+**Interpretation:** the baseline's 1/1000 observed success does not replace the
+0.01% analytical baseline. PIN-only and zero-rho outcomes equal sampled top-PIN
+counts in 12 audited rows; weak/good and prior variants have independent sample
+variation. Two-card simple-plus-PIN 18.7% versus Bayes 18.1% is not evidence of
+Bayes inferiority: intervals overlap and the runs use different victims/seeds.
+No output was adjusted to force expected ordering. All diagnostic charts were
+regenerated from the full saved study; no additional RSA/AES run was required.
+
+### 2026-10-20: Version final evidence and publish a focused conclusion (Kee, task 8.3)
+**Decision:** user explicitly requested CONCLUSION.md, repository evidence,
+commit and push. Copy the 5.5 MB raw card results plus validated real-size RSA
+and AES records into results/final-2026-10-20/. Preserve originals outside the
+repo; OpenSpec/AGENTS remain outside. Use results/** -text in .gitattributes so
+Git line-ending conversion cannot change recorded evidence hashes.
+**Reporting:** CONCLUSION.md connects assumptions, algorithms and measured
+outcomes, including intervals, sensitivity, a small public-divisor example,
+RSA bias and likely questions. Select five presentation figures with --kind
+presentation; retain --kind all for diagnostics. Version raw ranks, manifest,
+metadata, compact summary and verification inventory, not earlier draft charts.
+The figure captions describe model scope rather than calling final n=1000
+results smoke tests. Results are synthetic, not real card data or production keys.
+**Validation:** full suite 425 passed in 93.80s after adding presentation
+selection; raw evidence audited, main figures visually inspected, Markdown
+links and quantitative claims checked against saved summaries. Final caption
+layout changes also receive focused plotting checks before commit.
+No teammate-owned implementation changed. User review precedes archiving;
+slide/demo preparation remains shared and is not created by this change.
+
 ## Open decisions
 
-- RSA DTE: prime size, the exact prime range and its boundary handling with `sympy.nextprime`
-  (which returns the smallest prime strictly greater than its input).
-- Correlated card-pair model: which `rho` values to sweep (suggested 0, 0.25, 0.5, 0.75, 1; use the
-  Bayes-optimal rule).
 - Presentation date and timeline.

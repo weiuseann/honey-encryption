@@ -1,0 +1,2 @@
+n_trials,rank_one_successes,rank_one_rate,ci95_low,ci95_high,median_rank
+1000,93,0.093,0.07652372564174531,0.11259125576549656,3488.0

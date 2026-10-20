@@ -1,0 +1,36 @@
+{
+  "setup": "wallet-simple-pin",
+  "n_trials": 1000,
+  "seed": 2042,
+  "dte": "good",
+  "prior": "calibrated",
+  "k": 3,
+  "rho": 1,
+  "candidate_space": 10000,
+  "rank_one_reference": 0.0001,
+  "max_pin_prior_reference": 0.10713,
+  "prior_reference_assumptions": "matched messages, no extra evidence",
+  "environment": {
+    "created_utc": "2026-10-19T06:52:33.148121+00:00",
+    "python": "3.11.4",
+    "git_revision": "e69c1c0235002570e82cbc4d9303a7c4a871b655",
+    "git_dirty": true,
+    "versions": {
+      "cryptography": "50.0.2",
+      "numpy": "2.4.6",
+      "scipy": "1.17.1",
+      "sympy": "1.14.0",
+      "matplotlib": "3.11.2"
+    },
+    "data_sha256": {
+      "data/bin_list.csv": "9895841c34e80dbc488148f69a1ef403f98364f5cc212429a45749fa2798efd6",
+      "data/pin_frequencies.csv": "d0f4fd8196fe64f67dcb33ae5baae07568a540f336037a3904b6f1c488540760"
+    },
+    "source_sha256": {
+      "experiments/success_vs_baseline.py": "c1abf5e60a1ffb4c38d009542dbc7d1ea58dd74a6803ca67d9ad2cf20562ca2e",
+      "experiments/results.py": "d880de9150230ed9d1d98880f9b542cb88ae10fbc1a9fd81c54d0d7b4acd4f3f",
+      "experiments/cli.py": "a56b7893e3d110f2d12d21e4bba466bcbc6b523417e91c4304946ff3d1af75fe"
+    }
+  },
+  "elapsed_seconds": 731.5104051000017
+}

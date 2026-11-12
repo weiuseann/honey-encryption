@@ -1,36 +1,3 @@
-"""Good credit card DTE: decoys follow the same distribution as the BIN table.
-
-A card number is built in four steps:
-    network -> BIN (6 digits, from data/bin_list.csv) -> 9 middle digits -> Luhn check digit
-so every decoded card is 16 digits, starts with a BIN from the table and passes the Luhn check. The
-format filter attack therefore cannot rule out any decoy.
-
-Inverse-CDF with integer weights (no floats, so no rounding):
-  Each BIN has an integer weight w_i. Lay out W = sum(w_i) "slots" in a row and give BIN i the block
-  [start_i, start_i + w_i). Rows are sorted by network, so each network's BINs form one contiguous
-  block whose size is the network's total weight. Landing on a slot picks the network and then the
-  BIN, in a single lookup. A card is then one integer
-
-      u = slot * 10^9 + middle,      0 <= u < M = W * 10^9
-
-  and, as in the weak DTE, we hide u inside a 128-bit seed:
-
-      encode(card) = r * M + u    (random slot inside the card's BIN block, random r < 2^128 // M)
-      decode(seed) = int(seed) mod M, then split u back into (slot, middle)
-
-  Exactness: everything is integer arithmetic, so decode(encode(m)) == m by construction. BIN i owns
-  exactly w_i of the W slots, so P(BIN i) = w_i / W with no approximation error.
-
-  Uniformity: 2^128 is not a multiple of M, so the reduction mod M gives a few values of u one extra
-  seed. The relative bias is at most M / 2^128. With our table (W = 1000, M = 10^12) that is about
-  3e-27. The same bound limits the attacker's only other clue: encode never outputs a seed at or above
-  (2^128 // M) * M, and a random seed lands there with probability below M / 2^128.
-
-What this DTE does NOT model (an attacker with a better model of real cards can exploit it):
-  the weights are our assumption, middle digits are uniform although issuers allocate account ranges
-  unevenly, and BINs are 6 digits although Visa and Mastercard moved to 8-digit BINs in 2022.
-"""
-
 import bisect
 import csv
 from dataclasses import dataclass
@@ -44,7 +11,7 @@ BIN_PATH = Path(__file__).resolve().parent.parent / "data" / "bin_list.csv"
 
 N_DIGITS = 16
 BIN_DIGITS = 6
-MIDDLE_DIGITS = N_DIGITS - BIN_DIGITS - 1  # 9; the last digit is the Luhn check digit
+MIDDLE_DIGITS = N_DIGITS - BIN_DIGITS - 1  #9 since the last digit is the Luhn check digit
 MIDDLE_SPACE = 10**MIDDLE_DIGITS
 
 # Only 16-digit networks: Amex (15 digits) and other lengths don't fit the 16-digit message format.
